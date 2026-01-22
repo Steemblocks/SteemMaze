@@ -1,12 +1,11 @@
 # Stage 1: Build the application
-FROM node:18-alpine as builder
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
 # Install dependencies
-# Copying valid package.json and package-lock.json
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json ./
+RUN npm install
 
 # Copy source code
 COPY . .
