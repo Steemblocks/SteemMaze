@@ -3,7 +3,9 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies (git required for github dependencies)
+RUN apk add --no-cache git
+
 COPY package.json ./
 RUN npm install
 
