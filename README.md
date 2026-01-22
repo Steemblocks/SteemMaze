@@ -88,6 +88,36 @@ npm run build
 
 The output files will be generated in the `dist/` directory.
 
+## Docker Deployment for maze.steemblocks.com
+
+Since you are running multiple containers on your server, we will run the app on a specific port (e.g., **8081**) and use your main Nginx to proxy traffic to it.
+
+1. **Build the Docker Image**:
+
+   ```bash
+   docker build -t steem-maze .
+   ```
+
+2. **Run the Container**:
+
+   ```bash
+   docker run -d -p 8081:80 --name steem-maze --restart always steem-maze
+   ```
+
+3. **Configure Host Nginx (Reverse Proxy)**:
+   You need to configure your server's main Nginx to forward `maze.steemblocks.com` to port `8081`.
+
+   See `host_nginx_example.conf` for a configuration snippet.
+
+   After updating your host config:
+
+   ```bash
+   sudo nginx -t
+   sudo systemctl reload nginx
+   ```
+
+   The app will be accessible at: `http://maze.steemblocks.com`
+
 ## Project Structure
 
 - `js/`: Core application logic (Game engine, UI, Steem integration).
