@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment variables (NEVER commit these!)
+.env
+.env.local
+.env.development
+.env.production
+.env*.local
+
+# Secrets and Keys
+*.pem
+*.key
+secrets/
+config.local.js
+
+# Build output
+dist/
+build/
+.cache/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Debug
+debug/
+*.map
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Test coverage
+coverage/
+
+# Local configuration
+*.local
+*.local.js
+
+# Gemini agent files (optional - remove if you want to track these)
+# .agent/

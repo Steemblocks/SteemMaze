@@ -1,0 +1,979 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SteemMaze | 3D Enchanted Garden Maze</title>
+    <meta
+      name="description"
+      content="Navigate through enchanting 3D garden mazes."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"
+      rel="stylesheet"
+    />
+    <!-- Steem.js library for blockchain broadcasting -->
+    <script src="https://cdn.jsdelivr.net/npm/steem/dist/steem.min.js"></script>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <style>
+      /* Critical CSS to prevent FOUC */
+      :root {
+        --primary: #4ade80;
+        --bg-dark: #0a0f1a;
+        --text: #f8fafc;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        font-family: "Outfit", sans-serif;
+        overflow: hidden;
+        background: var(--bg-dark);
+        color: var(--text);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      #app {
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh;
+        position: relative;
+        overflow: hidden;
+      }
+      #preloader {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--bg-dark);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      }
+      .loader-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+      }
+      .loader-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(74, 222, 128, 0.1);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      .loader-text {
+        color: var(--primary);
+        font-weight: 500;
+        letter-spacing: 2px;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <!-- Preloader -->
+    <div id="preloader">
+      <div class="loader-content">
+        <div class="loader-spinner"></div>
+        <p class="loader-text">Loading...</p>
+      </div>
+    </div>
+
+    <div id="app">
+      <canvas id="bgCanvas"></canvas>
+
+      <!-- Login Screen -->
+      <div id="loginScreen" class="screen active">
+        <div class="menu-container full-height">
+          <div class="glass-card">
+            <div class="card-left">
+              <div class="logo-section">
+                <img
+                  src="/logo.png"
+                  alt="SteemMaze Logo"
+                  class="logo-img glow-img"
+                  width="80"
+                  height="80"
+                />
+                <h1 class="logo-text">STEEM<span>MAZE</span></h1>
+                <p class="logo-tagline">Navigate the Enchanted Garden</p>
+              </div>
+            </div>
+
+            <div class="card-right">
+              <div class="login-header">
+                <h2>Welcome</h2>
+                <p>Connect your wallet to begin</p>
+              </div>
+
+              <div class="login-box-content">
+                <div class="input-group">
+                  <span class="material-icons-round input-icon"
+                    >account_circle</span
+                  >
+                  <input
+                    type="text"
+                    id="steemUsername"
+                    placeholder="Steem Username"
+                    autocomplete="off"
+                  />
+                </div>
+
+                <button class="menu-btn primary" id="loginBtn">
+                  <span class="material-icons-round">vpn_key</span>
+                  <span>Login with Keychain</span>
+                </button>
+
+                <div class="divider">
+                  <span>OR</span>
+                </div>
+
+                <a
+                  href="https://signup.steemit.com/#source=condenser|category"
+                  target="_blank"
+                  class="menu-btn"
+                >
+                  <span class="material-icons-round">person_add</span>
+                  <span>Create Account</span>
+                </a>
+              </div>
+              <div id="keychainStatus" class="status-msg"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Menu -->
+      <div id="mainMenu" class="screen">
+        <div class="menu-container">
+          <div class="logo-section">
+            <img
+              src="/logo.png"
+              alt="SteemMaze Logo"
+              class="logo-img"
+              width="90"
+              height="90"
+            />
+            <h1 class="logo-text">STEEM<span>MAZE</span></h1>
+            <p class="logo-tagline">Navigate the Enchanted Garden</p>
+          </div>
+          <div class="menu-buttons">
+            <button class="menu-btn primary" id="resumeBtn">
+              <span class="material-icons-round">play_arrow</span
+              ><span id="resumeBtnText">Resume Game</span>
+            </button>
+            <button class="menu-btn" id="newGameBtn">
+              <span class="material-icons-round">refresh</span
+              ><span>New Game</span>
+            </button>
+            <button class="menu-btn" id="profileBtn">
+              <span class="material-icons-round">person</span
+              ><span>Profile</span>
+            </button>
+            <button class="menu-btn" id="leaderboardBtn">
+              <span class="material-icons-round">leaderboard</span
+              ><span>Leaderboard</span>
+            </button>
+            <button class="menu-btn" id="settingsBtn">
+              <span class="material-icons-round">settings</span
+              ><span>Settings</span>
+            </button>
+          </div>
+          <div class="quick-stats">
+            <div class="quick-stat">
+              <span class="material-icons-round">emoji_events</span
+              ><span id="menuBestScore">--</span><span>Best Score</span>
+            </div>
+            <div class="quick-stat">
+              <span class="material-icons-round">sports_score</span
+              ><span id="menuGamesPlayed">0</span><span>Games</span>
+            </div>
+            <div class="quick-stat">
+              <span class="material-icons-round">timer</span
+              ><span id="menuBestTime">--</span><span>Best Time</span>
+            </div>
+          </div>
+        </div>
+        <div class="particles">
+          <div class="particle"></div>
+          <div class="particle"></div>
+          <div class="particle"></div>
+          <div class="particle"></div>
+          <div class="particle"></div>
+          <div class="particle"></div>
+          <div class="particle"></div>
+          <div class="particle"></div>
+          <div class="particle"></div>
+          <div class="particle"></div>
+          <div class="particle"></div>
+          <div class="particle"></div>
+          <div class="particle"></div>
+          <div class="particle"></div>
+          <div class="particle"></div>
+        </div>
+      </div>
+
+      <!-- Game Screen -->
+      <div id="gameScreen" class="screen">
+        <canvas id="renderCanvas"></canvas>
+        <div id="gameUI">
+          <header id="gameHeader">
+            <button class="icon-btn" id="backToMenuBtn">
+              <span class="material-icons-round">arrow_back</span>
+            </button>
+            <h1 class="game-title">STEEM<span>MAZE</span></h1>
+            <button class="icon-btn" id="pauseBtn">
+              <span class="material-icons-round">pause</span>
+            </button>
+          </header>
+          <div id="gameStats">
+            <div class="game-stat">
+              <span class="material-icons-round">directions_walk</span
+              ><span class="stat-value" id="moves">0</span
+              ><span class="stat-label">Steps</span>
+            </div>
+            <div class="game-stat">
+              <span class="material-icons-round">timer</span
+              ><span class="stat-value" id="time">0:00</span
+              ><span class="stat-label">Time</span>
+            </div>
+            <div class="game-stat">
+              <span class="material-icons-round">star</span>
+              <span class="stat-value" id="scoreDisplay">0</span>
+              <span class="stat-label">Score</span>
+            </div>
+            <div class="game-stat">
+              <span class="material-icons-round">grid_3x3</span
+              ><span class="stat-value" id="levelDisplay">1</span
+              ><span class="stat-label">Level</span>
+            </div>
+          </div>
+
+          <!-- Bottom HUD (Coins, Shop, Lives) -->
+          <div id="bottomHUD">
+            <div class="game-stat">
+              <span class="material-icons-round">monetization_on</span>
+              <span class="stat-value" id="coinsDisplay">0</span>
+              <span class="stat-label">Coins</span>
+            </div>
+            <div
+              id="openShopBtn"
+              class="game-stat clickable"
+              title="Open Item Shop"
+            >
+              <span class="material-icons-round">storefront</span>
+              <span class="stat-label">Shop</span>
+            </div>
+            <div
+              id="buyLightBurstBtn"
+              class="game-stat clickable"
+              title="Use Light Burst (Boost Visibility)"
+            >
+              <span class="material-icons-round">light_mode</span>
+              <span class="stat-value">0</span>
+              <span class="stat-label">Light Burst</span>
+            </div>
+            <div
+              id="buyPotionBtn"
+              class="game-stat clickable"
+              title="Use Potion (Eliminate Zombie)"
+            >
+              <span class="material-icons-round">science</span>
+              <span class="stat-value">0</span>
+              <span class="stat-label">Use Potion</span>
+            </div>
+            <div
+              id="useFogRemoverBtn"
+              class="game-stat clickable"
+              title="Use Fog Remover (Clear Visibility)"
+            >
+              <span class="material-icons-round">blur_off</span>
+              <span class="stat-value">0</span>
+              <span class="stat-label">Clear Fog</span>
+            </div>
+            <div class="game-stat lives-stat">
+              <span class="material-icons-round">favorite</span
+              ><span class="stat-value" id="livesCount">3</span
+              ><span class="stat-label">Lives</span>
+            </div>
+          </div>
+          <div id="mobileControls">
+            <div class="control-row">
+              <button class="control-btn" data-dir="up">
+                <span class="material-icons-round">keyboard_arrow_up</span>
+              </button>
+            </div>
+            <div class="control-row">
+              <button class="control-btn" data-dir="left">
+                <span class="material-icons-round">keyboard_arrow_left</span>
+              </button>
+              <button class="control-btn" data-dir="down">
+                <span class="material-icons-round">keyboard_arrow_down</span>
+              </button>
+              <button class="control-btn" data-dir="right">
+                <span class="material-icons-round">keyboard_arrow_right</span>
+              </button>
+            </div>
+          </div>
+          <div id="controlsHint">
+            <div class="hint-item">
+              <span class="key">WASD</span><span>Move</span>
+            </div>
+            <div class="hint-item">
+              <span class="key">MOUSE</span><span>Look</span>
+            </div>
+          </div>
+          <div id="victoryScreen" class="overlay">
+            <div class="victory-panel">
+              <!-- Share to Steem Button -->
+              <button
+                id="shareToSteemBtn"
+                class="share-steem-btn"
+                title="Share to Steem"
+              >
+                <span class="material-icons-round">share</span>
+              </button>
+
+              <div class="victory-header">
+                <div class="victory-icon">
+                  <span class="material-icons-round">emoji_events</span>
+                </div>
+                <h2>LEVEL <span id="victoryLevel">1</span> COMPLETE!</h2>
+                <div id="victoryStars" class="victory-stars"></div>
+                <span
+                  id="victoryTimeLabel"
+                  class="time-label"
+                  style="display: none"
+                ></span>
+              </div>
+
+              <div class="victory-reward-box">
+                <span class="material-icons-round">monetization_on</span>
+                <span class="reward-amount" id="victoryReward">+0</span>
+                <span class="reward-label">Coins Earned</span>
+                <span
+                  class="reward-breakdown"
+                  id="victoryRewardBreakdown"
+                ></span>
+              </div>
+
+              <div class="victory-stats">
+                <div class="victory-stat">
+                  <span class="material-icons-round">directions_walk</span>
+                  <span id="victoryMoves">0</span><span>Steps</span>
+                </div>
+                <div class="victory-stat">
+                  <span class="material-icons-round">timer</span>
+                  <span id="victoryTime">0:00</span><span>Time</span>
+                </div>
+                <div class="victory-stat">
+                  <span class="material-icons-round">stars</span>
+                  <span id="victoryScore">0</span><span>Score</span>
+                </div>
+                <div class="victory-stat">
+                  <span class="material-icons-round">diamond</span>
+                  <span id="victoryGems">0/0</span><span>Gems</span>
+                </div>
+                <div class="victory-stat">
+                  <span class="material-icons-round">monetization_on</span>
+                  <span id="victoryCoins">0</span><span>Collected</span>
+                </div>
+                <div class="victory-stat">
+                  <span class="stat-emoji">💀</span>
+                  <span id="victoryZombies">0</span><span>Killed</span>
+                </div>
+                <div class="victory-stat">
+                  <span class="material-icons-round">bolt</span>
+                  <span id="victoryCombo">0</span><span>Max Combo</span>
+                </div>
+                <div class="victory-stat">
+                  <span class="material-icons-round">warning</span>
+                  <span id="victoryWalls">0</span><span>Wall Hits</span>
+                </div>
+              </div>
+
+              <div class="new-record" id="newRecordBadge" style="display: none">
+                <span class="material-icons-round">military_tech</span>
+                <span>NEW RECORD!</span>
+              </div>
+
+              <div class="victory-buttons">
+                <button class="menu-btn primary" id="nextLevelBtn">
+                  <span class="material-icons-round">arrow_forward</span>
+                  <span>Next Level</span>
+                </button>
+                <button class="menu-btn" id="replayBtn">
+                  <span class="material-icons-round">replay</span>
+                  <span>Replay</span>
+                </button>
+                <button class="menu-btn" id="victoryMenuBtn">
+                  <span class="material-icons-round">home</span
+                  ><span>Menu</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="pauseScreen" class="overlay">
+            <div class="pause-panel">
+              <h2>
+                <span class="material-icons-round">pause_circle</span> PAUSED
+              </h2>
+              <div class="pause-buttons">
+                <button class="menu-btn primary" id="pauseResumeBtn">
+                  <span class="material-icons-round">play_arrow</span
+                  ><span>Resume</span>
+                </button>
+                <button class="menu-btn" id="restartBtn">
+                  <span class="material-icons-round">replay</span
+                  ><span>Restart</span>
+                </button>
+                <button class="menu-btn danger" id="quitBtn">
+                  <span class="material-icons-round">exit_to_app</span
+                  ><span>Quit</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="gameOverScreen" class="overlay">
+            <div class="game-over-panel">
+              <div class="game-over-icon">
+                <span class="material-icons-round">skull</span>
+              </div>
+              <h2>GAME OVER</h2>
+              <p class="game-over-message">You ran out of lives!</p>
+              <div class="game-over-stats">
+                <div class="game-over-stat">
+                  <span class="material-icons-round">directions_walk</span
+                  ><span id="gameOverMoves">0</span><span>Steps</span>
+                </div>
+                <div class="game-over-stat">
+                  <span class="material-icons-round">timer</span
+                  ><span id="gameOverTime">0:00</span><span>Time</span>
+                </div>
+                <div class="game-over-stat">
+                  <span class="material-icons-round">grid_3x3</span
+                  ><span id="gameOverLevel">1</span><span>Level</span>
+                </div>
+              </div>
+              <div class="game-over-buttons">
+                <button class="menu-btn primary" id="gameOverRetryBtn">
+                  <span class="material-icons-round">replay</span
+                  ><span>Retry Level</span>
+                </button>
+                <button class="menu-btn danger" id="gameOverMenuBtn">
+                  <span class="material-icons-round">home</span
+                  ><span>Main Menu</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Shop Sidebar -->
+          <div id="shopSidebar" class="sidebar-overlay">
+            <div class="sidebar-panel">
+              <div class="sidebar-header">
+                <h2>
+                  <span class="material-icons-round">storefront</span> Shop
+                </h2>
+                <button class="icon-btn close-shop" id="closeShopBtn">
+                  <span class="material-icons-round">close</span>
+                </button>
+              </div>
+              <div class="shop-items-container">
+                <div class="shop-item-card">
+                  <div class="item-icon-box glow-yellow">
+                    <span class="material-icons-round">light_mode</span>
+                  </div>
+                  <div class="item-info">
+                    <h3>Light Burst</h3>
+                    <p>Boosts visibility for 30 seconds.</p>
+                    <div class="item-cost">
+                      <span class="cost-val">10</span>
+                      <span class="material-icons-round">monetization_on</span>
+                    </div>
+                  </div>
+                  <button class="menu-btn primary small" id="buyLightBtn">
+                    <span>Buy</span>
+                  </button>
+                </div>
+
+                <div class="shop-item-card featured">
+                  <div class="item-icon-box glow-green">
+                    <span class="material-icons-round">science</span>
+                  </div>
+                  <div class="item-info">
+                    <h3>Zombie Potion</h3>
+                    <p>
+                      Makes you invincible! Crash into zombies to kill them.
+                    </p>
+                    <div class="item-cost">
+                      <span class="cost-val">50</span>
+                      <span class="material-icons-round">monetization_on</span>
+                    </div>
+                  </div>
+                  <button class="menu-btn primary small" id="shopBuyPotionBtn">
+                    <span>Buy</span>
+                  </button>
+                </div>
+
+                <div class="shop-item-card">
+                  <div class="item-icon-box glow-cyan">
+                    <span class="material-icons-round">blur_off</span>
+                  </div>
+                  <div class="item-info">
+                    <h3>Fog Remover</h3>
+                    <p>
+                      Clears the fog for crystal clear visibility. Lasts 20
+                      seconds.
+                    </p>
+                    <div class="item-cost">
+                      <span class="cost-val">25</span>
+                      <span class="material-icons-round">monetization_on</span>
+                    </div>
+                  </div>
+                  <button class="menu-btn primary small" id="buyFogRemoverBtn">
+                    <span>Buy</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Profile Screen -->
+      <div id="profileScreen" class="screen">
+        <div class="screen-header">
+          <button class="icon-btn" id="profileBackBtn">
+            <span class="material-icons-round">arrow_back</span>
+          </button>
+          <h2>Profile</h2>
+          <div></div>
+        </div>
+        <div class="profile-content">
+          <div class="profile-card">
+            <div class="avatar">
+              <span class="material-icons-round">person</span>
+            </div>
+            <input
+              type="text"
+              id="playerName"
+              class="player-name-input"
+              placeholder="Enter Name"
+              value="Player"
+            />
+            <div class="player-title">
+              <span class="material-icons-round">military_tech</span
+              ><span id="playerTitle">Maze Explorer</span>
+            </div>
+          </div>
+          <div class="stats-grid">
+            <div class="profile-stat green">
+              <span class="material-icons-round">sports_score</span
+              ><span id="profileGamesPlayed">0</span><span>Games</span>
+            </div>
+            <div class="profile-stat gold">
+              <span class="material-icons-round">emoji_events</span
+              ><span id="profileBestScore">--</span><span>Best Score</span>
+            </div>
+            <div class="profile-stat blue">
+              <span class="material-icons-round">timer</span
+              ><span id="profileBestTime">--</span><span>Best Time</span>
+            </div>
+            <div class="profile-stat purple">
+              <span class="material-icons-round">directions_walk</span
+              ><span id="profileTotalSteps">0</span><span>Total Steps</span>
+            </div>
+            <div class="profile-stat orange">
+              <span class="material-icons-round">check_circle</span
+              ><span id="profileWins">0</span><span>Wins</span>
+            </div>
+            <div class="profile-stat purple">
+              <span class="material-icons-round">mood_bad</span
+              ><span id="profileLosses">0</span><span>Defeats</span>
+            </div>
+            <div class="profile-stat cyan">
+              <span class="material-icons-round">trending_up</span
+              ><span id="profileHighestLevel">1</span><span>Max Level</span>
+            </div>
+            <div class="profile-stat gold">
+              <span class="material-icons-round">monetization_on</span
+              ><span id="profileTotalCoins">0</span><span>Total Coins</span>
+            </div>
+            <div class="profile-stat red">
+              <span class="material-icons-round">auto_fix_high</span
+              ><span id="profileZombiesPurified">0</span
+              ><span>Zombies Purified</span>
+            </div>
+          </div>
+          <div class="achievements-section">
+            <h3>
+              <span class="material-icons-round">workspace_premium</span>
+              Achievements
+            </h3>
+            <div id="achievementsGrid" class="achievements-grid"></div>
+          </div>
+          <div class="blockchain-section">
+            <h3>
+              <span class="material-icons-round">blockchain</span>
+              Steem Blockchain Records
+            </h3>
+            <button class="menu-btn" id="viewBlockchainBtn">
+              <span class="material-icons-round">open_in_new</span>
+              <span>View on Steem</span>
+            </button>
+            <p class="blockchain-info">
+              Your game records are permanently stored on the Steem blockchain
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Leaderboard Screen -->
+      <div id="leaderboardScreen" class="screen">
+        <div class="screen-header">
+          <button class="icon-btn" id="leaderboardBackBtn">
+            <span class="material-icons-round">arrow_back</span>
+          </button>
+          <h2>Leaderboard</h2>
+          <button
+            class="icon-btn refresh-btn"
+            id="leaderboardRefreshBtn"
+            title="Refresh Leaderboard"
+          >
+            <span class="material-icons-round">refresh</span>
+          </button>
+        </div>
+        <div class="leaderboard-content">
+          <div class="leaderboard-tabs">
+            <button class="tab-btn active" data-tab="score">
+              <span class="material-icons-round">emoji_events</span>
+              <span>Score</span>
+            </button>
+            <button class="tab-btn" data-tab="time">
+              <span class="material-icons-round">timer</span>
+              <span>Time</span>
+            </button>
+            <button class="tab-btn" data-tab="level">
+              <span class="material-icons-round">trending_up</span>
+              <span>Level</span>
+            </button>
+          </div>
+          <div id="leaderboardList" class="leaderboard-list"></div>
+          <div id="playerRankCard" class="player-rank-card">
+            <div class="player-rank-info">
+              <span class="rank-badge" id="playerRank">#1</span>
+              <span class="material-icons-round player-rank-icon">person</span>
+              <span id="playerRankName">You</span>
+            </div>
+            <span id="playerRankValue" class="player-rank-value">--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings Screen -->
+      <div id="settingsScreen" class="screen">
+        <div class="screen-header">
+          <button class="icon-btn" id="settingsBackBtn">
+            <span class="material-icons-round">arrow_back</span>
+          </button>
+          <h2>Settings</h2>
+          <div></div>
+        </div>
+        <div class="settings-content">
+          <div class="settings-section">
+            <h3>
+              <span class="material-icons-round">videogame_asset</span> Game
+            </h3>
+            <div class="setting-item">
+              <span>Maze Size</span
+              ><select id="mazeSizeSelect">
+                <option value="11">Small</option>
+                <option value="15" selected>Medium</option>
+                <option value="21">Large</option>
+                <option value="31">Extreme</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <span>Camera Speed</span
+              ><input
+                type="range"
+                id="cameraSpeedSlider"
+                min="1"
+                max="10"
+                value="5"
+              />
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3><span class="material-icons-round">palette</span> Graphics</h3>
+            <div class="setting-item">
+              <span>Quality</span
+              ><select id="qualitySelect">
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high" selected>High</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <span>Shadows</span
+              ><label class="toggle"
+                ><input type="checkbox" id="shadowsToggle" checked /><span
+                  class="slider"
+                ></span
+              ></label>
+            </div>
+            <div class="setting-item">
+              <span>Fireflies</span
+              ><label class="toggle"
+                ><input type="checkbox" id="firefliesToggle" checked /><span
+                  class="slider"
+                ></span
+              ></label>
+            </div>
+            <div class="setting-item">
+              <span>Fog</span
+              ><input
+                type="range"
+                id="fogSlider"
+                min="0"
+                max="100"
+                value="50"
+              />
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3><span class="material-icons-round">volume_up</span> Audio</h3>
+            <div class="setting-item">
+              <span>Sound FX</span
+              ><label class="toggle"
+                ><input type="checkbox" id="sfxToggle" checked /><span
+                  class="slider"
+                ></span
+              ></label>
+            </div>
+            <div class="setting-item">
+              <span>Music</span
+              ><label class="toggle"
+                ><input type="checkbox" id="musicToggle" checked /><span
+                  class="slider"
+                ></span
+              ></label>
+            </div>
+            <div class="setting-item">
+              <span>Volume</span
+              ><input
+                type="range"
+                id="volumeSlider"
+                min="0"
+                max="100"
+                value="70"
+              />
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>
+              <span class="material-icons-round">touch_app</span> Controls
+            </h3>
+            <div class="setting-item">
+              <span>Mobile Controls</span
+              ><label class="toggle"
+                ><input
+                  type="checkbox"
+                  id="mobileControlsToggle"
+                  checked /><span class="slider"></span
+              ></label>
+            </div>
+            <div class="setting-item">
+              <span>Vibration</span
+              ><label class="toggle"
+                ><input type="checkbox" id="vibrationToggle" checked /><span
+                  class="slider"
+                ></span
+              ></label>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>
+              <span class="material-icons-round">language</span> Blockchain
+            </h3>
+            <div class="setting-item">
+              <span>Steem Node</span>
+              <select id="steemNodeSelect">
+                <option value="moecki">Moecki</option>
+                <option value="steemworld">Steem World</option>
+                <option value="pennsif">Pennsif</option>
+                <option value="steemit" selected>Steemit</option>
+                <option value="justyy">Justyy</option>
+                <option value="wherein">Wherein</option>
+                <option value="steememory">Steem Memory</option>
+                <option value="boylikegirl">Boy Like Girl</option>
+                <option value="steemitdev">Steemit Dev</option>
+                <option value="custom">Custom Node</option>
+              </select>
+            </div>
+            <div
+              class="setting-item"
+              id="customNodeContainer"
+              style="display: none"
+            >
+              <span>Custom Node URL</span>
+              <input
+                type="text"
+                id="customNodeInput"
+                placeholder="https://api.example.com"
+                style="
+                  width: 100%;
+                  padding: 8px;
+                  border: 1px solid var(--glass-border);
+                  border-radius: 6px;
+                  background: rgba(255, 255, 255, 0.05);
+                  color: #fff;
+                  font-size: 12px;
+                  margin-top: 4px;
+                "
+              />
+            </div>
+            <div
+              class="setting-item"
+              style="font-size: 11px; color: #888; margin-top: 8px"
+            >
+              <span
+                >Current Node:
+                <span id="currentNodeDisplay">Steemit</span></span
+              >
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>
+              <span class="material-icons-round">dataset</span> Data Management
+            </h3>
+            <div class="data-actions-grid">
+              <button class="menu-btn secondary" id="restoreFromBlockchainBtn">
+                <span class="material-icons-round">cloud_sync</span>
+                <span>Restore Data</span>
+              </button>
+              <button class="menu-btn danger" id="resetDataBtn">
+                <span class="material-icons-round">delete_forever</span>
+                <span>Reset Data</span>
+              </button>
+            </div>
+            <div class="setting-divider"></div>
+            <button class="menu-btn logout-btn" id="logoutBtn">
+              <span class="material-icons-round">logout</span>
+              <span>Logout</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Steem Share Modal -->
+      <div id="steemShareModal" class="overlay">
+        <div class="steem-share-card">
+          <button class="modal-close-btn" id="steemShareCloseBtn">
+            <span class="material-icons-round">close</span>
+          </button>
+          <div class="steem-share-header">
+            <span class="material-icons-round">share</span>
+            <h2>Share Your Victory!</h2>
+            <p>Post your game result to Steem?</p>
+          </div>
+          <div class="steem-share-content">
+            <div class="steem-share-info">
+              <p>
+                Your achievement will be published to the Steem blockchain and
+                visible to the community.
+              </p>
+            </div>
+            <div class="steem-share-actions">
+              <button class="menu-btn primary" id="steemShareYesBtn">
+                <span class="material-icons-round">done</span>
+                <span>Share to Steem</span>
+              </button>
+              <button class="menu-btn secondary" id="steemSkipBtn">
+                <span class="material-icons-round">arrow_forward</span>
+                <span>Skip & Continue</span>
+              </button>
+              <button class="menu-btn" id="steemShareCancelBtn">
+                <span class="material-icons-round">close</span>
+                <span>Close</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pause Screen -->
+      <div id="pauseScreen" class="overlay">
+        <div class="pause-card">
+          <div class="pause-header">
+            <span class="material-icons-round">pause_circle</span>
+            <h2>PAUSED</h2>
+          </div>
+          <div class="pause-actions">
+            <button class="menu-btn primary" id="gameResumeBtn">
+              <span class="material-icons-round">play_arrow</span>
+              <span>Resume</span>
+            </button>
+            <button class="menu-btn" id="restartBtn">
+              <span class="material-icons-round">refresh</span>
+              <span>Restart</span>
+            </button>
+            <button class="menu-btn danger" id="quitBtn">
+              <span class="material-icons-round">logout</span>
+              <span>Quit</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Confirmation Modal -->
+      <div id="confirmationModal" class="overlay">
+        <div class="confirmation-card">
+          <div class="modal-icon danger">
+            <span class="material-icons-round">warning</span>
+          </div>
+          <h2>Reset All Data?</h2>
+          <p class="modal-text">
+            This will permanently delete your progress, scores, and
+            achievements. This action cannot be undone.
+          </p>
+          <div class="modal-actions">
+            <button class="menu-btn" id="cancelResetBtn">
+              <span class="material-icons-round">close</span>
+              <span>Cancel</span>
+            </button>
+            <button class="menu-btn danger" id="confirmResetBtn">
+              <span class="material-icons-round">delete_forever</span>
+              <span>Reset Everything</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="toast-container"></div>
+    <script type="module" src="/js/main.js"></script>
+  </body>
+</html>
