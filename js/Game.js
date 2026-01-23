@@ -3305,24 +3305,28 @@ export class Game {
     this.level = 1;
     this.totalCoins = 0;
 
+    // COMPLETE RESET of game state
+    // We must PRESERVE the login session though!
+    const savedSteemUser = this.gameData.get("steemUsername");
+    const savedPlayerName = this.gameData.get("playerName");
+
     // Reset all persistent data
     this.gameData.reset(); // Resets to default (Level 1, 0 Coins, etc.)
 
-    // If connected, we should likely post this "Reset" to the blockchain so the state is consistent?
-    // User logic: "all the local storage game data should also change to zero"
-    // If we don't post a reset, the blockchain will still have the old high stats.
-    // But for the local session, we strictly reset.
+    // Restore login session
+    if (savedSteemUser) {
+      this.gameData.set("steemUsername", savedSteemUser);
+    }
+    if (savedPlayerName) {
+      this.gameData.set("playerName", savedPlayerName);
+    }
+
+    // If connected, keep the blockchain connection sync
     if (steemIntegration.isConnected && steemIntegration.username) {
-      try {
-        // Optional: Post a reset record?
-        // Or just let the next victory post overwrite the state?
-        // Since our leaderboard looks at "Highest" values, posting 0 might not "erase" history but sets current state.
-        // We won't force a post here to keep it fast, unless needed.
-        // The key is the local session starts fresh.
-        this.ui.showToast("Started fresh game via local reset", "restart_alt");
-      } catch (e) {
-        console.warn("Error during new game reset", e);
-      }
+      this.ui.showToast(
+        "Started fresh game (Session preserved)",
+        "restart_alt",
+      );
     }
 
     this.gameData.set("currentLevel", this.level);
