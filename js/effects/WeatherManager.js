@@ -19,10 +19,6 @@ export class WeatherManager {
     // Create separated effect instances
     this.rainEffect = new RainEffect(scene);
     this.thunderEffect = new ThunderEffect(scene);
-
-    console.log(
-      "🌩️ WeatherManager initialized with separated Rain and Thunder effects",
-    );
   }
 
   /**
@@ -37,8 +33,6 @@ export class WeatherManager {
     // Start both effects
     this.rainEffect.start(intensity);
     this.thunderEffect.start(intensity);
-
-    console.log("⛈️ Storm started at intensity:", intensity);
   }
 
   /**
@@ -53,8 +47,6 @@ export class WeatherManager {
     // Stop both effects
     this.rainEffect.stop();
     this.thunderEffect.stop();
-
-    console.log("☀️ Storm ended");
   }
 
   /**
@@ -145,6 +137,5 @@ export class WeatherManager {
     this.stopStorm();
     this.rainEffect.dispose();
     this.thunderEffect.dispose();
-    console.log("🌩️ WeatherManager disposed");
   }
 }

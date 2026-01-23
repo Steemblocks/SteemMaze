@@ -62,9 +62,4 @@ if (import.meta.env?.DEV) {
   // Expose modules for debugging in development
   window.gameData = gameData;
   window.uiManager = uiManager;
-
-  console.log("🎮 SteemMaze initialized in development mode");
-  console.log(
-    "📦 Available debug objects: window.game, window.gameData, window.uiManager"
-  );
 }

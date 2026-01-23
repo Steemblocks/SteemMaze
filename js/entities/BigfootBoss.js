@@ -50,6 +50,16 @@ export class BigfootBoss {
     // Create the container mesh immediately so Game can position it
     this.mesh = new THREE.Group();
 
+    // Placeholder: Big Red Box (so it's visible if model fails)
+    const placeholderGeo = new THREE.BoxGeometry(1.5, 3.0, 1.5);
+    const placeholderMat = new THREE.MeshStandardMaterial({
+      color: 0x880000,
+      wireframe: true,
+    });
+    this.placeholder = new THREE.Mesh(placeholderGeo, placeholderMat);
+    this.placeholder.position.y = 1.5; // Stand on ground
+    this.mesh.add(this.placeholder);
+
     // Initial position
     this.updateTargetPosition();
     this.mesh.position.copy(this.targetPos);
@@ -64,18 +74,14 @@ export class BigfootBoss {
 
   loadModel() {
     const loader = new GLTFLoader();
-    console.log("Attempting to load Bigfoot model from /models/bigfoot.glb");
 
     loader.load(
       "/models/bigfoot.glb",
       (gltf) => {
         // If entity was destroyed while loading, abort and cleanup
         if (this.isDisposed) {
-          console.log("Bigfoot model loaded but entity disposed, discarding.");
           return;
         }
-
-        console.log("Bigfoot model loaded successfully!");
 
         // Remove debug placeholder
         if (this.placeholder) {
@@ -108,16 +114,9 @@ export class BigfootBoss {
         this.mesh.add(this.model);
         // this.scene.add(this.mesh); // ALREADY ADDED IN CONSTRUCTOR
 
-        // Handle Animations
         if (gltf.animations && gltf.animations.length > 0) {
           this.mixer = new THREE.AnimationMixer(this.model);
           this.animations = gltf.animations;
-
-          // Debug animations
-          console.log(
-            "Bigfoot Animations:",
-            this.animations.map((a) => a.name),
-          );
 
           // Try to find a walk, run, or generic move animation
           // Keywords: Walk, Run, Move, Action
@@ -127,7 +126,6 @@ export class BigfootBoss {
           if (!moveAnim) moveAnim = gltf.animations[0]; // Fallback
 
           if (moveAnim) {
-            console.log("Playing animation:", moveAnim.name);
             this.activeAction = this.mixer.clipAction(moveAnim);
             this.activeAction.timeScale = 1.5; // Speed up animation
             this.activeAction.play();
@@ -176,11 +174,19 @@ export class BigfootBoss {
   }
 
   // Renamed from updatePosition to just updating the target logic
+  // When teleporting (e.g., clearSafeZone), we need to snap mesh immediately
   updatePosition() {
     this.updateTargetPosition();
-    // Do NOT set position instantly; let lerp handle it in update()
-    // Unless fast travel needed:
-    // this.mesh.position.copy(this.targetPos);
+
+    // IMPORTANT: When grid position is changed externally (like clearSafeZone),
+    // we need to snap the mesh IMMEDIATELY to the new position to prevent
+    // the boss from appearing to be in two places at once or "disappearing"
+    // because the old position is far from the new targetPos
+    if (this.mesh && this.targetPos) {
+      this.mesh.position.x = this.targetPos.x;
+      this.mesh.position.z = this.targetPos.z;
+      this.mesh.position.y = 0;
+    }
   }
 
   setPlayerPosition(playerX, playerZ, isLightBoostActive = false) {
@@ -255,7 +261,8 @@ export class BigfootBoss {
     if (moveX !== 0 || moveZ !== 0) {
       this.gridX += moveX;
       this.gridZ += moveZ;
-      this.updatePosition();
+      // For normal movement, just update targetPos (lerp will handle smooth movement)
+      this.updateTargetPosition();
 
       // Smooth Rotation
       const targetRot = Math.atan2(moveX, moveZ);
@@ -282,23 +289,31 @@ export class BigfootBoss {
     // Try to flee in the direction away from player
     if (moveX !== 0 && this.canMove(moveX, 0)) {
       this.gridX += moveX;
-      this.updatePosition();
+      this.updateTargetPosition();
       this.mesh.rotation.y = Math.atan2(moveX, 0);
     } else if (moveZ !== 0 && this.canMove(0, moveZ)) {
       this.gridZ += moveZ;
-      this.updatePosition();
+      this.updateTargetPosition();
       this.mesh.rotation.y = Math.atan2(0, moveZ);
     } else if (this.canMove(moveX, moveZ)) {
       this.gridX += moveX;
       this.gridZ += moveZ;
-      this.updatePosition();
+      this.updateTargetPosition();
       this.mesh.rotation.y = Math.atan2(moveX, moveZ);
     }
   }
 
   update(deltaTime = 0.016) {
     // Guard: Skip update if disposed
-    if (this.isDisposed || !this.mesh) return;
+    if (this.isDisposed) return;
+
+    // CRITICAL: If mesh was removed from scene, re-add it
+    if (this.mesh && !this.mesh.parent) {
+      this.scene.add(this.mesh);
+    }
+
+    // If mesh doesn't exist, we can't do anything
+    if (!this.mesh) return;
 
     // 1. Logic Timer
     this.moveTimer++;
@@ -319,53 +334,50 @@ export class BigfootBoss {
     if (this.mesh && this.targetPos) {
       // Validate targetPos to prevent NaN issues
       if (isNaN(this.targetPos.x) || isNaN(this.targetPos.z)) {
-        console.warn("BigfootBoss: Invalid targetPos, recalculating...");
         this.updateTargetPosition();
-        return;
+        // DON'T return early - continue to ensure mesh is in valid state
       }
 
-      // Clamp interpolation factor to prevent overshooting/instability during lag spikes
-      // If factor > 1.0, the position diverges effectively disappearing the boss
-      const lerpSpeed = 5.0 * deltaTime;
-      const factor = Math.min(lerpSpeed, 1.0);
+      // Only do lerp if targetPos is valid
+      if (!isNaN(this.targetPos.x) && !isNaN(this.targetPos.z)) {
+        // Clamp interpolation factor to prevent overshooting/instability during lag spikes
+        const lerpSpeed = 5.0 * deltaTime;
+        const factor = Math.min(lerpSpeed, 1.0);
 
-      // Calculate new positions
-      const newX =
-        this.mesh.position.x +
-        (this.targetPos.x - this.mesh.position.x) * factor;
-      const newZ =
-        this.mesh.position.z +
-        (this.targetPos.z - this.mesh.position.z) * factor;
+        // Calculate new positions
+        const newX =
+          this.mesh.position.x +
+          (this.targetPos.x - this.mesh.position.x) * factor;
+        const newZ =
+          this.mesh.position.z +
+          (this.targetPos.z - this.mesh.position.z) * factor;
 
-      // Check for NaN or Infinity before applying
-      if (!isNaN(newX) && !isNaN(newZ) && isFinite(newX) && isFinite(newZ)) {
-        this.mesh.position.x = newX;
-        this.mesh.position.z = newZ;
-      } else {
-        // If position would be invalid, snap to target
-        console.warn(
-          "BigfootBoss: Position divergence detected, snapping to target",
-        );
-        this.mesh.position.x = this.targetPos.x;
-        this.mesh.position.z = this.targetPos.z;
+        // Check for NaN or Infinity before applying
+        if (!isNaN(newX) && !isNaN(newZ) && isFinite(newX) && isFinite(newZ)) {
+          this.mesh.position.x = newX;
+          this.mesh.position.z = newZ;
+        } else {
+          // If position would be invalid, snap to target
+          this.mesh.position.x = this.targetPos.x;
+          this.mesh.position.z = this.targetPos.z;
+        }
+
+        // Check for excessive divergence (boss too far from target)
+        const divergence =
+          Math.abs(this.mesh.position.x - this.targetPos.x) +
+          Math.abs(this.mesh.position.z - this.targetPos.z);
+        if (divergence > this.cellSize * 3) {
+          this.mesh.position.x = this.targetPos.x;
+          this.mesh.position.z = this.targetPos.z;
+        }
       }
 
-      // Check for excessive divergence (boss too far from target)
-      const divergence =
-        Math.abs(this.mesh.position.x - this.targetPos.x) +
-        Math.abs(this.mesh.position.z - this.targetPos.z);
-      if (divergence > this.cellSize * 3) {
-        console.warn("BigfootBoss: Excessive divergence, snapping to target");
-        this.mesh.position.x = this.targetPos.x;
-        this.mesh.position.z = this.targetPos.z;
-      }
-
-      // Ensure mesh remains visible (y position sanity check)
-      if (this.mesh.position.y !== 0) {
+      // ALWAYS ensure mesh Y position is valid
+      if (isNaN(this.mesh.position.y) || this.mesh.position.y !== 0) {
         this.mesh.position.y = 0;
       }
 
-      // Ensure mesh is visible in scene
+      // ALWAYS ensure mesh is visible
       if (!this.mesh.visible) {
         this.mesh.visible = true;
       }

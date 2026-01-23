@@ -84,8 +84,6 @@ export class GameData {
       return false;
     }
 
-    console.log("Restoring from", gameRecords.length, "blockchain records");
-
     let updatedStats = {
       gamesPlayed: 0,
       wins: 0,
@@ -203,16 +201,6 @@ export class GameData {
 
     // Save updated data
     this.save();
-
-    console.log("Restored stats:", {
-      gamesPlayed: this.data.gamesPlayed,
-      wins: this.data.wins,
-      bestScore: this.data.bestScore,
-      bestTime: this.data.bestTime,
-      highestLevel: this.data.highestLevel,
-      totalCoins: this.data.totalCoins,
-      totalZombiesPurified: this.data.totalZombiesPurified,
-    });
 
     return true;
   }

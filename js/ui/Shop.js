@@ -312,14 +312,9 @@ export class Shop {
       this.game.hordeCheckTimeout = null;
     }
 
-    // Despawn any existing horde - player used protection!
-    if (
-      this.game.hordeSpawned &&
-      typeof this.game.despawnHorde === "function"
-    ) {
-      this.game.despawnHorde();
-      this.game.ui.showToast("🌟 Horde flees from the light!", "light_mode");
-    }
+    // NOTE: Light Burst does NOT despawn zombies anymore
+    // Zombies are independent - they only disappear when killed by player
+    // Light Burst just makes enemies flee (repel effect)
 
     // Store original density if not already stored
     if (!this.lightBoostActive) {
@@ -399,17 +394,9 @@ export class Shop {
       this.game.hordeCheckTimeout = null;
     }
 
-    // Despawn any existing horde - player used protection!
-    if (
-      this.game.hordeSpawned &&
-      typeof this.game.despawnHorde === "function"
-    ) {
-      this.game.despawnHorde();
-      this.game.ui.showToast(
-        "🌟 Horde disperses in the clear air!",
-        "blur_off",
-      );
-    }
+    // NOTE: Fog Remover does NOT despawn zombies anymore
+    // Zombies are independent - they only disappear when killed by player
+    // Fog Remover just clears the fog for better visibility
 
     // Store original density if not already stored
     if (!this.fogRemoverActive) {

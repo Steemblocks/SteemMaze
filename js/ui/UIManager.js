@@ -33,7 +33,6 @@ export class UIManager {
       // Sync data from blockchain in background
       this.syncFromBlockchain(savedUsername)
         .then(() => {
-          console.log("Background blockchain sync completed");
           this.updateAllStats();
         })
         .catch((error) => {
@@ -71,7 +70,6 @@ export class UIManager {
         // If leaving game screen, stop all game sounds first
         if (leavingGameScreen) {
           window.game.audioManager.stopAllSounds();
-          console.log("Stopped all game sounds when leaving game screen");
         }
 
         if (musicScreens.includes(screenId)) {
@@ -205,8 +203,6 @@ export class UIManager {
             maxCombo: data.maxCombo || game.maxCombo || 0,
             isNewRecord: data.isNewRecord || false,
           };
-
-          console.log("Sharing to Steem blog:", blogData);
 
           const result = await steemIntegration.postGameBlog(blogData);
 
@@ -342,14 +338,11 @@ export class UIManager {
 
         try {
           this.showToast("Fetching your game records from blockchain...");
-          console.log("Starting blockchain restore for:", username);
 
           const records = await steemIntegration.fetchGameRecordsFromCustomJson(
             username,
             1000,
           );
-
-          console.log("Fetched records:", records.length);
 
           if (records.length === 0) {
             this.showToast("No game records found on blockchain");
@@ -368,25 +361,15 @@ export class UIManager {
             }
           }
 
-          console.log("Best stats found:", { bestLevel, bestScore, bestTime });
-
           // Restore directly - button click is the confirmation
           this.showToast(`Found ${records.length} records! Restoring...`);
 
           try {
             const success = this.gameData.restoreFromBlockchain(records);
-            console.log("Restore result:", success);
 
             if (success) {
               // Show what was restored
               const stats = this.gameData.data;
-              console.log("Restored data:", {
-                gamesPlayed: stats.gamesPlayed,
-                highestLevel: stats.highestLevel,
-                currentLevel: stats.currentLevel,
-                bestScore: stats.bestScore,
-                totalCoins: stats.totalCoins,
-              });
 
               this.showToast(
                 `✅ Restored! Level ${stats.highestLevel}, Score ${stats.bestScore}. Reloading...`,
@@ -452,7 +435,6 @@ export class UIManager {
             };
 
             await steemIntegration.postGameRecord(resetData);
-            console.log("Blockchain data reset successfully");
           } catch (err) {
             console.error("Failed to reset blockchain data:", err);
             // Continue with local reset even if blockchain fails
@@ -497,11 +479,9 @@ export class UIManager {
           // ALWAYS reset local data first - we'll restore from blockchain
           // This ensures we never show stale data from a previous account
           const previousUsername = this.gameData.data.steemUsername;
-          console.log(`Login: ${previousUsername || "(none)"} -> ${username}`);
 
           // Reset all game data to defaults
           this.gameData.reset();
-          console.log("Local data reset to defaults");
 
           // Set the new username
           this.gameData.set("steemUsername", username);
@@ -556,7 +536,6 @@ export class UIManager {
       if (statusEl) {
         statusEl.textContent = "Fetching data from blockchain...";
       }
-      console.log("Syncing game data from blockchain for:", username);
 
       // Fetch game records from custom_json operations
       const records = await steemIntegration.fetchGameRecordsFromCustomJson(
@@ -564,10 +543,7 @@ export class UIManager {
         100, // Fetch last 100 records for sync
       );
 
-      console.log(`Found ${records.length} game records on blockchain`);
-
       if (records.length === 0) {
-        console.log("No blockchain records found - this is a new player");
         if (statusEl) {
           statusEl.textContent =
             "Welcome! Starting fresh - no previous game data found.";
@@ -625,8 +601,6 @@ export class UIManager {
         }
       }
 
-      console.log("Blockchain stats found:", blockchainStats);
-
       // Apply all blockchain data to local storage (we start from defaults, so just set everything)
       this.gameData.set("highestLevel", blockchainStats.highestLevel);
       this.gameData.set("currentLevel", blockchainStats.highestLevel + 1);
@@ -641,8 +615,6 @@ export class UIManager {
         blockchainStats.totalZombiesPurified,
       );
       this.gameData.set("totalSteps", blockchainStats.totalSteps);
-
-      console.log("✓ Local data restored from blockchain");
 
       if (statusEl) {
         statusEl.textContent = `Data restored! ${records.length} game records found.`;
@@ -895,7 +867,6 @@ export class UIManager {
         "Refreshing leaderboard from blockchain...",
         "cloud_download",
       );
-      console.log("Starting leaderboard refresh...");
 
       // Show loading state in leaderboard list
       const listEl = document.getElementById("leaderboardList");
@@ -916,26 +887,17 @@ export class UIManager {
 
       const leaderboard = await steemIntegration.fetchGlobalLeaderboard(100);
 
-      console.log(
-        "Received leaderboard with",
-        leaderboard?.length || 0,
-        "players",
-      );
-      console.log("Leaderboard data:", leaderboard);
-
       if (leaderboard && leaderboard.length > 0) {
         // Leaderboard already has rankScore from fetchGlobalLeaderboard
         // Update stored leaderboard
         this.gameData.data.leaderboard = leaderboard;
         this.gameData.save();
 
-        console.log("Saved leaderboard, now updating display...");
         this.updateLeaderboard("score");
         this.showToast(
           `Leaderboard updated! ${leaderboard.length} players found`,
         );
       } else {
-        console.log("No players found on blockchain");
         this.showToast("No players found on blockchain yet", "info");
         // Clear old leaderboard data
         this.gameData.data.leaderboard = [];

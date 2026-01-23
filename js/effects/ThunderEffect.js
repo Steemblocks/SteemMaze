@@ -37,7 +37,6 @@ export class ThunderEffect {
 
   init() {
     this.createLightningLight();
-    console.log("⚡ ThunderEffect initialized");
   }
 
   /**
@@ -47,7 +46,6 @@ export class ThunderEffect {
     this.lightningLight = new THREE.DirectionalLight(0xffffff, 0);
     this.lightningLight.position.set(50, 100, 0);
     this.scene.add(this.lightningLight);
-    console.log("⚡ Lightning light created");
   }
 
   /**
@@ -57,7 +55,6 @@ export class ThunderEffect {
     if (this.scene.fog) {
       this.originalFogColor = this.scene.fog.color.clone();
       this.originalFogDensity = this.scene.fog.density;
-      console.log("⚡ Captured original fog settings");
     }
   }
 
@@ -77,8 +74,6 @@ export class ThunderEffect {
 
     // Schedule first thunder
     this.scheduleNextThunder();
-
-    console.log("⚡ Thunder started with intensity:", this.intensity);
   }
 
   /**
@@ -98,8 +93,6 @@ export class ThunderEffect {
 
     // Restore fog
     this.restoreFog();
-
-    console.log("⚡ Thunder stopped");
   }
 
   /**
@@ -158,7 +151,6 @@ export class ThunderEffect {
     }, thunderDelay);
 
     this.lastThunderTime = performance.now();
-    console.log("⚡ Lightning triggered!");
   }
 
   /**
@@ -282,7 +274,5 @@ export class ThunderEffect {
     if (this.lightningLight) {
       this.scene.remove(this.lightningLight);
     }
-
-    console.log("⚡ ThunderEffect disposed");
   }
 }

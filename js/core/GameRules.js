@@ -23,48 +23,48 @@ export const GameRules = {
     MASTER: { minLevel: 21, maxLevel: Infinity, multiplier: 2.5 },
   },
 
-  // --- Scoring & Rewards ---
-  BASE_SCORE: 1000,
-  POINTS_PER_GEM: 150,
-  POINTS_PER_LEVEL: 250,
-  POINTS_PER_COIN: 25,
-  PENALTY_PER_WALL_HIT: 50,
-  BONUS_PER_COMBO_POINT: 25,
+  // --- Scoring & Rewards (HARDER - reduced values) ---
+  BASE_SCORE: 500, // Reduced from 1000
+  POINTS_PER_GEM: 75, // Reduced from 150
+  POINTS_PER_LEVEL: 100, // Reduced from 250
+  POINTS_PER_COIN: 10, // Reduced from 25
+  PENALTY_PER_WALL_HIT: 75, // Increased from 50
+  BONUS_PER_COMBO_POINT: 15, // Reduced from 25
   GEM_LIFE_BONUS: 1,
 
-  // --- Combo System ---
+  // --- Combo System (Harder thresholds) ---
   COMBO_THRESHOLDS: {
-    MINOR: 5, // Minor bonus starts
-    MODERATE: 10, // Better bonus
-    MAJOR: 20, // Major rewards
-    SUPER: 35, // Super combo
-    LEGENDARY: 50, // Legendary status
+    MINOR: 8, // Was 5
+    MODERATE: 15, // Was 10
+    MAJOR: 25, // Was 20
+    SUPER: 40, // Was 35
+    LEGENDARY: 60, // Was 50
   },
   COMBO_MULTIPLIERS: {
-    MINOR: 1.1,
-    MODERATE: 1.25,
-    MAJOR: 1.5,
-    SUPER: 2.0,
-    LEGENDARY: 3.0,
+    MINOR: 1.05, // Was 1.1
+    MODERATE: 1.15, // Was 1.25
+    MAJOR: 1.3, // Was 1.5
+    SUPER: 1.6, // Was 2.0
+    LEGENDARY: 2.0, // Was 3.0
   },
 
-  // --- Time Bonuses ---
+  // --- Time Bonuses (Harder thresholds, lower bonuses) ---
   TIME_BONUS_TIERS: {
-    PERFECT: { threshold: 0.5, bonus: 1000, label: "PERFECT!" },
-    EXCELLENT: { threshold: 0.7, bonus: 500, label: "EXCELLENT!" },
-    GOOD: { threshold: 0.9, bonus: 200, label: "Good" },
-    OK: { threshold: 1.0, bonus: 50, label: "Completed" },
-    SLOW: { threshold: 1.5, bonus: 0, label: "Slow" },
+    PERFECT: { threshold: 0.5, bonus: 500, label: "PERFECT!" }, // Harder threshold, less bonus
+    EXCELLENT: { threshold: 0.7, bonus: 250, label: "EXCELLENT!" },
+    GOOD: { threshold: 0.9, bonus: 100, label: "Good" },
+    OK: { threshold: 1.1, bonus: 25, label: "Completed" },
+    SLOW: { threshold: 2.0, bonus: 0, label: "Slow" },
   },
 
-  // --- Power-Ups ---
+  // --- Power-Ups (Balanced Durations) ---
   POWERUP_DURATION: 300, // Frames (5s at 60fps)
   POWERUP_TYPES: {
     SHIELD: { duration: 3600, color: 0x3b82f6, label: "Shield" }, // 60 seconds (effectively until hit)
-    SPEED: { duration: 300, color: 0xfbbf24, label: "Speed Boost" },
-    FREEZE: { duration: 240, color: 0x06b6d4, label: "Time Freeze" },
-    MAGNET: { duration: 420, color: 0xa855f7, label: "Coin Magnet" },
-    DOUBLE_SCORE: { duration: 300, color: 0x22c55e, label: "2X Score" },
+    SPEED: { duration: 420, color: 0xfbbf24, label: "Speed Boost" }, // 7 seconds
+    FREEZE: { duration: 480, color: 0x06b6d4, label: "Time Freeze" }, // 8 seconds (was 4s)
+    MAGNET: { duration: 480, color: 0xa855f7, label: "Coin Magnet" }, // 8 seconds
+    DOUBLE_SCORE: { duration: 420, color: 0x22c55e, label: "2X Score" }, // 7 seconds
   },
 
   // --- Economy ---
@@ -141,24 +141,31 @@ export const GameRules = {
 
   /**
    * Calculate number of zombies for current level
-   * Scales more aggressively at higher levels
-   * Level 1 = 1, Level 10 = 10, Level 30 = 30
+   * Scales in 5-LEVEL TIERS (FEWER THAN DOGS)
    */
   getZombieCount(level) {
-    // Base count starts at 1, increases by 1 per level
-    const baseCount = Math.floor(1 + (level - 1) * 1.0);
-    return Math.min(baseCount, 50); // Higher cap (was 20)
+    // Tier calculation: 0 for 1-5, 1 for 6-10, etc.
+    const tier = Math.floor((level - 1) / 5);
+
+    // Lower count for zombies (slower enemies)
+    // L1: 2, L6: 5, L11: 8...
+    const count = 2 + tier * 3 + Math.floor(Math.pow(1.1, tier));
+    return Math.min(count, 40);
   },
 
   /**
    * Calculate number of zombie dogs for current level
-   * Dogs appear from level 2, scale with level
+   * Dogs appear from level 2 (MORE NUMEROUS THAN ZOMBIES)
    */
   getZombieDogCount(level) {
     if (level < 2) return 0;
-    // Almost 1 per level
-    const dogCount = Math.floor(level * 0.8);
-    return Math.min(dogCount, 30); // Higher cap (was 10)
+
+    const tier = Math.floor((level - 1) / 5);
+    // Higher count for dogs (fast enemies)
+    // L1-5: ~4, L6-10: ~10, L11-15: ~16...
+    // Base 4, +6 per tier
+    const count = 4 + tier * 6 + Math.floor(Math.pow(1.2, tier));
+    return Math.min(count, 60);
   },
 
   /**
@@ -239,14 +246,26 @@ export const GameRules = {
    * Returns zombie and dog counts for horde spawns
    */
   getHordeConfig(level) {
-    // Horde scales massively with level
-    const extraZombies = Math.floor((level - 5) * 0.8);
-    const extraDogs = Math.floor((level - 5) * 0.6);
+    // 5-LEVEL TIERED SCALING
+
+    // Bosses: 1 at L6, 2 at L11, 3 at L16...
+    // Formula: floor((level - 1) / 5) for level > 5
+    let bossCount = 0;
+    if (level > 5) {
+      bossCount = Math.floor((level - 1) / 5);
+    }
+    // Ensure at least 1 boss if in horde range (usually L5+)
+    if (level >= 5 && bossCount === 0) bossCount = 1;
+
+    // Zombies & Dogs: Tiered increase (DOGS > ZOMBIES)
+    const tier = Math.floor((level - 1) / 5);
+    const zombieCount = 3 + tier * 3; // Lower growth for zombies
+    const dogCount = 6 + tier * 8; // MASSIVE growth for dogs
 
     return {
-      bossCount: 1, // Base boss count (Game.js adds more)
-      zombieCount: Math.min(5 + extraZombies, 25), // Max 25 horde zombies
-      dogCount: Math.min(3 + extraDogs, 15), // Max 15 horde dogs
+      bossCount: Math.min(bossCount, 6), // Cap at 6 bosses
+      zombieCount: Math.min(zombieCount, 30), // Max 30 horde zombies
+      dogCount: Math.min(dogCount, 50), // Max 50 horde dogs
     };
   },
 
@@ -461,6 +480,7 @@ export const GameRules = {
 
   /**
    * Calculate total score based on comprehensive game state
+   * Scoring is designed to be encouraging - players always earn SOME points for completing a level
    */
   calculateScore(state) {
     const {
@@ -486,10 +506,10 @@ export const GameRules = {
     const sizeBonus = mazeSize * 50;
     const levelBonus = level * this.POINTS_PER_LEVEL;
 
-    // Efficiency bonuses
+    // Efficiency bonuses (can be 0 or positive, not heavily negative)
     const timeResult = this.getTimeBonus(time, parTime);
     const timeBonus = timeResult.bonus;
-    const moveBonus = this.getMoveEfficiencyBonus(moves, parMoves);
+    const moveBonus = Math.max(0, this.getMoveEfficiencyBonus(moves, parMoves)); // No negative move bonus
 
     // Collection bonuses
     const gemBonus = gemsCollected * this.POINTS_PER_GEM;
@@ -499,11 +519,11 @@ export const GameRules = {
     // Combo bonus
     const comboBonus = this.calculateComboBonus(maxCombo);
 
-    // Penalty
-    const wallPenalty = wallHits * this.PENALTY_PER_WALL_HIT;
+    // Penalty - STRICTER: higher per-hit and higher cap
+    const wallPenalty = Math.min(wallHits * 50, 1000); // Increased from 25*20=500 to 50*20=1000
 
-    // Power-up usage bonus (small reward for using them)
-    const powerUpBonus = powerUpsUsed * 25;
+    // Power-up usage bonus (reduced)
+    const powerUpBonus = powerUpsUsed * 10; // Reduced from 25
 
     // Calculate subtotal
     let subtotal =
@@ -525,10 +545,13 @@ export const GameRules = {
 
     // Apply double score power-up if active
     if (isDoubleScoreActive) {
-      subtotal = Math.floor(subtotal * 1.5); // 50% bonus during double score, not full 2x
+      subtotal = Math.floor(subtotal * 1.25); // Reduced from 1.5 to 1.25
     }
 
-    return Math.max(0, subtotal);
+    // MINIMUM GUARANTEED SCORE: Reduced minimum
+    const minimumScore = 50 + level * 25; // Reduced from 100 + level * 50
+
+    return Math.max(minimumScore, subtotal);
   },
 
   /**
@@ -552,7 +575,7 @@ export const GameRules = {
       comboBonus: this.calculateComboBonus(state.maxCombo),
       zombieBonus:
         (state.zombiesKilled || 0) * this.getZombieKillReward(state.level),
-      wallPenalty: state.wallHits * this.PENALTY_PER_WALL_HIT,
+      wallPenalty: Math.min(state.wallHits * 25, 500),
       difficultyMultiplier: tier.multiplier,
       difficultyTier: tier.name,
       total: this.calculateScore(state),

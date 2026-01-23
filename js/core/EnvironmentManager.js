@@ -31,7 +31,7 @@ export class EnvironmentManager {
       // 2. Rock Texture
       const textureLoader = new THREE.TextureLoader();
       const texture = await new Promise((resolve) =>
-        textureLoader.load("/models/environment/texture.png", resolve)
+        textureLoader.load("/models/environment/texture.png", resolve),
       );
 
       const loader = new FBXLoader();
@@ -62,7 +62,7 @@ export class EnvironmentManager {
               `/models/environment/${file}`,
               resolve,
               undefined,
-              reject
+              reject,
             );
           });
 
@@ -83,7 +83,7 @@ export class EnvironmentManager {
           object.scale.set(
             0.05 * scaleMultiplier,
             0.05 * scaleMultiplier,
-            0.05 * scaleMultiplier
+            0.05 * scaleMultiplier,
           );
           targetArray.push(object);
         } catch (e) {
@@ -97,9 +97,6 @@ export class EnvironmentManager {
       ]);
 
       this.isLoaded = true;
-      console.log(
-        `Environment: Loaded ${this.smallModels.length} small and ${this.largeModels.length} large models.`
-      );
     } catch (error) {
       console.warn("Failed to load environment assets:", error);
     }
@@ -209,7 +206,7 @@ export class EnvironmentManager {
       model.rotation.set(
         Math.random() * 0.5,
         Math.random() * Math.PI * 2,
-        Math.random() * 0.5
+        Math.random() * 0.5,
       );
 
       const scale =
@@ -247,7 +244,7 @@ export class EnvironmentManager {
       model.rotation.set(
         Math.random() * 0.5,
         Math.random() * Math.PI * 2,
-        Math.random() * 0.5
+        Math.random() * 0.5,
       );
 
       const scale =

@@ -59,7 +59,6 @@ export class AudioManager {
 
     audio.addEventListener("canplaythrough", () => {
       this.sounds[name] = audio;
-      console.log(`Audio "${name}" reloaded successfully`);
     });
 
     audio.addEventListener("error", () => {
@@ -297,8 +296,6 @@ export class AudioManager {
         sound.currentTime = 0;
       }
     });
-
-    console.log("AudioManager: All sounds stopped");
   }
 
   toggleMute() {

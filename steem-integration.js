@@ -70,15 +70,9 @@ export class SteemIntegration {
         this.customNode = saved.substring(7);
         this.currentNodeUrl = this.customNode;
         this.currentNode = "custom";
-        console.log("Loaded custom Steem node:", this.customNode);
       } else if (STEEM_NODES[saved]) {
         this.currentNode = saved;
         this.currentNodeUrl = STEEM_NODES[saved];
-        console.log(
-          "Loaded Steem node:",
-          this.currentNode,
-          this.currentNodeUrl,
-        );
       }
     }
   }
@@ -107,7 +101,7 @@ export class SteemIntegration {
         ? `custom:${this.customNode}`
         : this.currentNode,
     );
-    console.log("Switched to node:", this.currentNode, this.currentNodeUrl);
+
     return true;
   }
 
@@ -122,7 +116,7 @@ export class SteemIntegration {
     this.customNode = nodeUrl;
     // Automatically switch to custom node
     this.setNode("custom");
-    console.log("Custom node set:", nodeUrl);
+
     return true;
   }
 
@@ -156,7 +150,6 @@ export class SteemIntegration {
   setUsername(username) {
     this.username = username;
     this.isConnected = true;
-    console.log(`Steem Integration: Connected as @${username}`);
 
     // Add this player to the registry
     this.addPlayerToRegistry(username);
@@ -176,9 +169,6 @@ export class SteemIntegration {
         const data = JSON.parse(cached);
         this.playerRegistry = new Set(data.players || []);
         this.registryLastBroadcast = data.lastBroadcast || 0;
-        console.log(
-          `Loaded ${this.playerRegistry.size} players from registry cache`,
-        );
       }
     } catch (e) {
       console.warn("Failed to load player registry:", e);
@@ -215,16 +205,11 @@ export class SteemIntegration {
     this.playerRegistry.add(username);
 
     if (wasNew) {
-      console.log(`🆕 New player discovered: ${username}`);
       this.savePlayerRegistry();
       this.pendingRegistryUpdate = true;
 
       // Broadcast IMMEDIATELY for new players
-      this.broadcastPlayerRegistry().then((success) => {
-        if (success) {
-          console.log(`✅ Player ${username} added to blockchain registry`);
-        }
-      });
+      this.broadcastPlayerRegistry().then((success) => {});
     }
   }
 
@@ -241,12 +226,9 @@ export class SteemIntegration {
     // Check and broadcast every hour
     this.registrySyncInterval = setInterval(() => {
       if (this.pendingRegistryUpdate) {
-        console.log("⏰ Periodic registry sync triggered");
         this.broadcastPlayerRegistry();
       }
     }, this.registryConfig.broadcastInterval);
-
-    console.log("🔄 Periodic registry sync started (every 1 hour)");
   }
 
   /**
@@ -261,8 +243,6 @@ export class SteemIntegration {
    */
   async fetchPlayerRegistryFromBlockchain() {
     try {
-      console.log("Fetching player registry from blockchain...");
-
       const response = await fetch(this.currentNodeUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -301,10 +281,6 @@ export class SteemIntegration {
           try {
             const json = JSON.parse(opData.json);
             if (json.players && Array.isArray(json.players)) {
-              console.log(
-                `Found player registry with ${json.players.length} players`,
-              );
-
               // Merge with local registry
               json.players.forEach((p) => this.playerRegistry.add(p));
               this.savePlayerRegistry();
@@ -317,7 +293,6 @@ export class SteemIntegration {
         }
       }
 
-      console.log("No player registry found on blockchain");
       return [];
     } catch (error) {
       console.error("Failed to fetch player registry:", error);
@@ -338,10 +313,6 @@ export class SteemIntegration {
     }
 
     try {
-      console.log(
-        `Broadcasting player registry with ${this.playerRegistry.size} players...`,
-      );
-
       const players = Array.from(this.playerRegistry);
 
       const customJsonData = {
@@ -377,7 +348,6 @@ export class SteemIntegration {
         );
       });
 
-      console.log("✓ Player registry broadcast successful:", result);
       this.registryLastBroadcast = Date.now();
       this.pendingRegistryUpdate = false;
       this.savePlayerRegistry();
@@ -420,13 +390,10 @@ export class SteemIntegration {
    * Call from console: steemIntegration.forceBroadcastRegistry()
    */
   async forceBroadcastRegistry() {
-    console.log("🚀 Force broadcasting player registry...");
     this.pendingRegistryUpdate = true;
     const result = await this.broadcastPlayerRegistry();
     if (result) {
-      console.log("✅ Registry broadcast successful!");
     } else {
-      console.log("❌ Registry broadcast failed!");
     }
     return result;
   }
@@ -435,29 +402,6 @@ export class SteemIntegration {
    * Debug: Show current registry status
    * Call from console: steemIntegration.debugRegistry()
    */
-  debugRegistry() {
-    console.log("=== PLAYER REGISTRY DEBUG ===");
-    console.log("Account:", this.registryConfig.account);
-    console.log(
-      "Key configured:",
-      this.registryConfig.postingKey !== "YOUR_POSTING_KEY_HERE",
-    );
-    console.log("Players in registry:", this.playerRegistry.size);
-    console.log("Player list:", Array.from(this.playerRegistry));
-    console.log(
-      "Last broadcast:",
-      this.registryLastBroadcast
-        ? new Date(this.registryLastBroadcast).toISOString()
-        : "Never",
-    );
-    console.log("Pending update:", this.pendingRegistryUpdate);
-    console.log(
-      "Broadcast interval:",
-      this.registryConfig.broadcastInterval / 1000 / 60,
-      "minutes",
-    );
-    console.log("=============================");
-  }
   /**
    * Post game record to Steem blockchain using Keychain
    * Uses custom_json operation for pure data storage
@@ -501,17 +445,8 @@ export class SteemIntegration {
 
       // Check if window.steem_keychain exists (Keychain extension)
       if (typeof window.steem_keychain === "undefined") {
-        console.error(
-          "Steem Keychain extension not found - make sure it's installed",
-        );
         throw new Error("Steem Keychain extension not found");
       }
-
-      console.log(
-        "Attempting to post game record to Steem with username:",
-        this.username,
-      );
-      console.log("Game data:", gameRecord);
 
       // Create custom_json operation for pure JSON data storage (more efficient than posts)
       const customJsonOperation = [
@@ -524,28 +459,14 @@ export class SteemIntegration {
         },
       ];
 
-      // Use Keychain requestBroadcast API
+      // Use Keychain requestBroadcast API (no timeout - user can cancel in Keychain UI)
       return new Promise((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-          reject(
-            new Error(
-              "Steem Keychain posting timeout - no response from extension",
-            ),
-          );
-        }, 10000); // 10 second timeout
-
         window.steem_keychain.requestBroadcast(
           this.username,
           [customJsonOperation],
           "posting",
           (response) => {
-            clearTimeout(timeoutId);
-            console.log("Keychain response:", response);
-
             if (response.success) {
-              console.log("Game record posted to Steem blockchain:", response);
-              console.log("Transaction ID:", response.result?.transaction_id);
-
               // Register this player as active for leaderboard discovery
               this.registerActivePlayer(this.username);
 
@@ -568,18 +489,13 @@ export class SteemIntegration {
               }
 
               console.error("Failed to post game record:", errorMessage);
-              console.error(
-                "Full response:",
-                JSON.stringify(response, null, 2),
-              );
-
               reject(new Error(`Keychain error: ${errorMessage}`));
             }
           },
         );
       });
     } catch (error) {
-      console.error("Error posting game record to Steem:", error);
+      console.error("Error posting game record:", error);
       throw error;
     }
   }
@@ -677,8 +593,6 @@ ${
       gameData.level
     } Complete! | Score: ${gameData.score.toLocaleString()} | ${starsDisplay}`;
 
-    console.log("Posting blog to Steem:", { title, permlink });
-
     // Check for Keychain
     if (typeof window.steem_keychain === "undefined") {
       throw new Error("Steem Keychain extension not found");
@@ -710,10 +624,8 @@ ${
         "posting", // Use posting key for blog posts
         (response) => {
           clearTimeout(timeoutId);
-          console.log("Blog post response:", response);
 
           if (response.success) {
-            console.log("Blog posted successfully!");
             const postUrl = `https://steemit.com/@${this.username}/${permlink}`;
             resolve({
               success: true,
@@ -852,9 +764,6 @@ ${
    */
   async fetchGameRecordsFromCustomJson(username, maxRecords = 1000) {
     try {
-      console.log("Fetching custom_json game records for:", username);
-      console.log("Using node:", this.currentNodeUrl);
-
       const gameRecords = [];
       let from = -1; // Start from most recent
       const batchSize = 100; // API limit
@@ -862,8 +771,6 @@ ${
       let hasMore = true;
 
       while (hasMore && totalFetched < maxRecords) {
-        console.log(`Fetching batch from index ${from}...`);
-
         const requestBody = {
           jsonrpc: "2.0",
           method: "condenser_api.get_account_history",
@@ -891,7 +798,6 @@ ${
         }
 
         const history = result.result || [];
-        console.log(`Received ${history.length} entries in this batch`);
 
         if (history.length === 0) {
           hasMore = false;
@@ -926,9 +832,6 @@ ${
                   block: operation.block,
                   trx_id: operation.trx_id,
                 });
-                console.log(
-                  `✓ Found game record: Level ${json.game.level}, Score ${json.game.score}`,
-                );
               }
             } catch (e) {
               console.warn("Failed to parse game record JSON:", e);
@@ -953,10 +856,6 @@ ${
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
-      console.log(
-        `Total fetched: ${totalFetched} entries, found ${gameRecords.length} game records`,
-      );
-
       // Sort by timestamp descending (newest first)
       gameRecords.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
@@ -973,15 +872,11 @@ ${
    */
   async fetchGlobalLeaderboard(limit = 100) {
     try {
-      console.log("Fetching global leaderboard from blockchain...");
-
       // First, try to fetch the player registry from blockchain
       await this.fetchPlayerRegistryFromBlockchain();
 
       // Get all known players (registry + local cache + hardcoded fallbacks)
       const uniquePlayers = this.getAllKnownPlayers();
-
-      console.log(`Checking ${uniquePlayers.length} known players...`);
 
       const playerStats = {};
       let totalRecordsFound = 0;
@@ -1075,10 +970,6 @@ ${
               // Store the timestamp for reference
               lastPlayed: mostRecentRecord.timestamp,
             };
-
-            console.log(
-              `✓ ${username}: Level ${playerStats[username].highestLevel}, Score ${playerStats[username].score} (from ${records.length} records, scanned all)`,
-            );
           }
         } catch (e) {
           console.warn(`Failed to fetch records for ${username}:`, e.message);
@@ -1107,12 +998,6 @@ ${
         .sort((a, b) => b.rankScore - a.rankScore)
         .slice(0, limit);
 
-      console.log(
-        `✓ Leaderboard complete! Found ${totalRecordsFound} records from ${
-          Object.keys(playerStats).length
-        } unique players`,
-      );
-
       // Cache the leaderboard with timestamp
       localStorage.setItem(
         "steemmaze_leaderboard_cache",
@@ -1130,7 +1015,7 @@ ${
       const cached = localStorage.getItem("steemmaze_leaderboard_cache");
       if (cached) {
         const { data } = JSON.parse(cached);
-        console.log("Returning cached leaderboard due to error");
+
         return data || [];
       }
 
@@ -1232,7 +1117,6 @@ ${
         "steemmaze_active_players",
         JSON.stringify(activePlayers),
       );
-      console.log("Registered active player:", username);
     }
   }
 

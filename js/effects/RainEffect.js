@@ -72,13 +72,6 @@ export class RainEffect {
   init() {
     this.createMainRain();
     this.createBackdropRain();
-    console.log(
-      "🌧️ RainEffect initialized with",
-      this.rainCount,
-      "main +",
-      this.backdropCount,
-      "backdrop drops",
-    );
   }
 
   createMainRain() {
@@ -129,8 +122,6 @@ export class RainEffect {
     this.rainMesh.frustumCulled = false;
     this.rainMesh.renderOrder = 2000; // Very high render order
     this.scene.add(this.rainMesh);
-
-    console.log("🌧️ Main rain particles created");
   }
 
   createBackdropRain() {
@@ -193,10 +184,6 @@ export class RainEffect {
    */
   start(intensity = 1.0) {
     this.targetIntensity = Math.min(1.0, Math.max(0, intensity));
-    console.log(
-      "🌧️ Rain starting with target intensity:",
-      this.targetIntensity,
-    );
 
     // Ensure meshes are in scene
     if (this.rainMesh && !this.rainMesh.parent) {
@@ -212,7 +199,6 @@ export class RainEffect {
    */
   stop() {
     this.targetIntensity = 0;
-    console.log("🌧️ Rain stopping");
   }
 
   /**
@@ -341,7 +327,6 @@ export class RainEffect {
     this.debugMode = true;
     this.targetIntensity = 1.0;
     this.intensity = 1.0;
-    console.log("🌧️ Rain debug mode ENABLED (Points)");
   }
 
   /**
@@ -349,7 +334,6 @@ export class RainEffect {
    */
   disableDebug() {
     this.debugMode = false;
-    console.log("🌧️ Rain debug mode DISABLED");
   }
 
   /**
@@ -381,6 +365,5 @@ export class RainEffect {
       this.backdropGeometry.dispose();
       this.backdropMaterial.dispose();
     }
-    console.log("🌧️ RainEffect disposed");
   }
 }

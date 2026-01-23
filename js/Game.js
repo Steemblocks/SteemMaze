@@ -117,6 +117,7 @@ export class Game {
     this.isMagnetActive = false; // Coin magnet effect
     this.isDoubleScoreActive = false; // Double score power-up
     this.isLightBoostActive = false; // Light boost repels zombies
+    this.invincibilityFrames = 0; // Temporary invincibility after taking damage
 
     // Special events
     this.eventTimer = 0;
@@ -315,18 +316,13 @@ export class Game {
 
     // DEBUG: Expose rain test function globally for debugging
     window.testRain = () => {
-      console.log("🌧️ DEBUG: Starting rain test...");
       this.weatherManager.enableRainDebug();
       this.weatherManager.startStorm(1.0);
     };
     window.stopRain = () => {
-      console.log("🌧️ DEBUG: Stopping rain...");
       this.weatherManager.disableRainDebug();
       this.weatherManager.stopStorm();
     };
-    console.log(
-      "🌧️ Rain debug available: call testRain() or stopRain() in console",
-    );
 
     // Camera Controller - DISABLED for stable 3rd person view
     this.cameraController = null;
@@ -925,26 +921,181 @@ export class Game {
     wallMesh.count = instanceId;
     this.scene.add(wallMesh);
 
-    const goalGeo = new THREE.TorusKnotGeometry(0.5, 0.2, 100, 16);
-    const goalMat = animationCache.getMaterial(
-      "goal",
-      () =>
-        new THREE.MeshStandardMaterial({
-          color: 0xfbbf24,
-          emissive: 0xfbbf24,
-          emissiveIntensity: 2,
-          metalness: 1,
-          roughness: 0,
-        }),
+    // === 3D PORTAL GOAL (STARGATE CLASS) ===
+    this.goal = new THREE.Group();
+    this.portalParts = []; // Store parts for animation
+
+    const PORTAL_SCALE = 0.75; // Slightly smaller to fit cell
+
+    // 0. Pedestal (Base)
+    const pedestalGeo = new THREE.CylinderGeometry(
+      2.2 * PORTAL_SCALE,
+      2.5 * PORTAL_SCALE,
+      0.4,
+      8,
     );
-    this.goal = new THREE.Mesh(goalGeo, goalMat);
+    const pedestalMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.8,
+      metalness: 0.5,
+    });
+    const pedestal = new THREE.Mesh(pedestalGeo, pedestalMat);
+    pedestal.position.y = 0.2; // Sit solidly on ground
+    pedestal.castShadow = true;
+    pedestal.receiveShadow = true;
+    this.goal.add(pedestal);
+
+    // 1. Massive Outer Ring (Tech Frame)
+    const ringGeo = new THREE.TorusGeometry(
+      1.6 * PORTAL_SCALE,
+      0.25 * PORTAL_SCALE,
+      12,
+      40,
+    );
+    const ringMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a, // Dark metallic
+      metalness: 0.8,
+      roughness: 0.3,
+      emissive: 0x0ea5e9,
+      emissiveIntensity: 0.2,
+    });
+    const portalRing = new THREE.Mesh(ringGeo, ringMat);
+    portalRing.position.y = 1.8 * PORTAL_SCALE; // Lifted above pedestal
+
+    // Add glowing nodes to ring
+    for (let i = 0; i < 8; i++) {
+      const node = new THREE.Mesh(
+        new THREE.BoxGeometry(
+          0.5 * PORTAL_SCALE,
+          0.3 * PORTAL_SCALE,
+          0.5 * PORTAL_SCALE,
+        ),
+        new THREE.MeshStandardMaterial({
+          color: 0x00ffff,
+          emissive: 0x00ffff,
+          emissiveIntensity: 2,
+        }),
+      );
+      const angle = (i / 8) * Math.PI * 2;
+      node.position.set(
+        Math.cos(angle) * 1.6 * PORTAL_SCALE,
+        Math.sin(angle) * 1.6 * PORTAL_SCALE,
+        0,
+      );
+      node.rotation.z = angle;
+      portalRing.add(node);
+    }
+    this.goal.add(portalRing);
+    this.portalParts.push({ mesh: portalRing, speed: 0.2, axis: "z" }); // Slow rotation
+
+    // 2. Inner Rotating Stabilizer Ring
+    const innerRingGeo = new THREE.TorusGeometry(
+      1.2 * PORTAL_SCALE,
+      0.1 * PORTAL_SCALE,
+      8,
+      30,
+    );
+    const innerRingMat = new THREE.MeshStandardMaterial({
+      color: 0x64748b,
+      metalness: 0.9,
+      roughness: 0.4,
+    });
+    const innerRing = new THREE.Mesh(innerRingGeo, innerRingMat);
+    innerRing.position.y = 1.8 * PORTAL_SCALE; // Lifted
+    this.goal.add(innerRing);
+    this.portalParts.push({ mesh: innerRing, speed: -0.8, axis: "x" }); // Gyroscopic rotation
+
+    // 3. Event Horizon (Deep Energy Vortex)
+    const vortexGroup = new THREE.Group();
+    vortexGroup.position.y = 1.8 * PORTAL_SCALE; // Lifted
+    this.goal.add(vortexGroup);
+
+    // Layer 1: Core Brightness
+    const vortexCore = new THREE.Mesh(
+      new THREE.CircleGeometry(1.1 * PORTAL_SCALE, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0xe0f2fe,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide,
+      }),
+    );
+    vortexGroup.add(vortexCore);
+
+    // Layer 2: Swirling Nebula
+    const vortexNebula = new THREE.Mesh(
+      new THREE.CircleGeometry(1.0 * PORTAL_SCALE, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0x06b6d4, // Cyan
+        transparent: true,
+        opacity: 0.6,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    vortexNebula.position.z = 0.05;
+    vortexGroup.add(vortexNebula);
+    this.portalParts.push({ mesh: vortexNebula, speed: 3.0, axis: "z" });
+
+    // Layer 3: Darker Grid Overlay
+    const vortexGrid = new THREE.Mesh(
+      new THREE.RingGeometry(0.1, 1.1 * PORTAL_SCALE, 32, 4),
+      new THREE.MeshBasicMaterial({
+        color: 0x0e7490,
+        transparent: true,
+        opacity: 0.4,
+        wireframe: true,
+        side: THREE.DoubleSide,
+      }),
+    );
+    vortexGrid.position.z = 0.1;
+    vortexGroup.add(vortexGrid);
+    this.portalParts.push({ mesh: vortexGrid, speed: -1.5, axis: "z" });
+
+    // 5. Particle System
+    const particleCount = 80;
+    const particlesGeo = new THREE.BufferGeometry();
+    const particlePositions = [];
+
+    for (let i = 0; i < particleCount; i++) {
+      const r = Math.random() * 1.5 * PORTAL_SCALE;
+      const theta = Math.random() * Math.PI * 2;
+      const z = (Math.random() - 0.5) * 2;
+      particlePositions.push(Math.cos(theta) * r, Math.sin(theta) * r, z);
+    }
+    particlesGeo.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(particlePositions, 3),
+    );
+    const particlesMat = new THREE.PointsMaterial({
+      color: 0x67e8f9,
+      size: 0.1,
+      transparent: true,
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending,
+    });
+    const particles = new THREE.Points(particlesGeo, particlesMat);
+    vortexGroup.add(particles); // Add to vortex group
+    this.portalParts.push({ mesh: particles, speed: 0.5, axis: "z" }); // Rotate around center axis
+
+    // Portal Light
+    const portalLight = new THREE.PointLight(0x06b6d4, 3, 8);
+    portalLight.position.y = 1.8 * PORTAL_SCALE;
+    this.goal.add(portalLight);
+    this.portalParts.push({ light: portalLight, baseIntensity: 3 });
+
+    // Position the whole group
+    // Position the whole goal on the ground
     this.goal.position.set(
       offset + 0.5 * this.CELL_SIZE,
-      1.5,
+      0, // ON THE GROUND
       offset + 0.5 * this.CELL_SIZE,
     );
+
+    // Rotate 45 degrees to face the room center usually
+    this.goal.rotation.y = Math.PI / 4;
+
     this.scene.add(this.goal);
-    this.goal.add(new THREE.PointLight(0xfbbf24, 2, 10));
 
     // Spawn gems throughout the maze
     this.createGems();
@@ -1081,32 +1232,47 @@ export class Game {
     const goalZ = 0;
 
     // Minimum distance from player start (gives player breathing room)
-    // === BOSS SPAWN (Level 5+) ===
-    // Force spawn 1 Bigfoot Boss somewhere distinct
-    if (this.level >= 5) {
-      // Active from level 5
-      let bx, bz;
-      do {
-        bx = Math.floor(Math.random() * this.MAZE_SIZE);
-        bz = Math.floor(Math.random() * this.MAZE_SIZE);
-      } while (
-        Math.abs(bx - this.playerPos.x) + Math.abs(bz - this.playerPos.z) <
-        5
-      ); // Minimum safe distance
+    // === BOSS SPAWN (Level 6+) ===
+    // Persistent Bosses appear starting at Level 6
+    if (this.level >= 6) {
+      // Scale boss count based on 5-level tiers: L6-10: 1, L11-15: 2, etc.
+      const bigfootCount = Math.floor((this.level - 1) / 5);
+      const actualCount = Math.min(bigfootCount, 6); // Max 6 Persistent Bigfoots
 
-      console.log(`SPAWNING BOSS AT: ${bx}, ${bz}`);
-      const boss = new BigfootBoss(
-        bx,
-        bz,
-        this.maze,
-        this.CELL_SIZE,
-        this.MAZE_SIZE,
-        this.scene,
-        this.level,
+      for (let i = 0; i < actualCount; i++) {
+        let bx, bz;
+        let attempts = 0;
+        do {
+          bx = Math.floor(Math.random() * this.MAZE_SIZE);
+          bz = Math.floor(Math.random() * this.MAZE_SIZE);
+          attempts++;
+        } while (
+          (Math.abs(bx - this.playerPos.x) + Math.abs(bz - this.playerPos.z) <
+            4 || // Far from player
+            usedPositions.has(`${bx},${bz}`)) && // Not on another entity
+          attempts < 50
+        );
+
+        usedPositions.add(`${bx},${bz}`);
+
+        const boss = new BigfootBoss(
+          bx,
+          bz,
+          this.maze,
+          this.CELL_SIZE,
+          this.MAZE_SIZE,
+          this.scene,
+          this.level,
+        );
+        boss.isPersistent = true; // Mark as persistent level boss
+        this.bossZombies.push(boss);
+      }
+
+      const bossLabel = actualCount > 1 ? "BOSSES" : "BOSS";
+      this.ui.showToast(
+        `⚠️ ${actualCount} BIGFOOT ${bossLabel} DETECTED!`,
+        "warning",
       );
-      boss.isPersistent = true; // Mark as persistent level boss
-      this.bossZombies.push(boss);
-      this.ui.showToast("⚠️ BIGFOOT BOSS DETECTED!", "warning");
     }
 
     for (let i = 0; i < zombieCount; i++) {
@@ -1536,7 +1702,6 @@ export class Game {
       case "darkness":
         // Double check: ensure we don't trigger darkness too early
         if (this.time < minTimeForDarkness) {
-          console.log("Prevented early darkness triggering");
           return;
         }
         this.triggerDarknessEvent();
@@ -1557,7 +1722,6 @@ export class Game {
   triggerDarknessEvent() {
     // Check if Fog Remover prevents darkness
     if (this.shop && this.shop.fogRemoverActive) {
-      console.log("Fog Remover active - preventing darkness event");
       return;
     }
 
@@ -1605,15 +1769,26 @@ export class Game {
     if (this.level >= 5) {
       this.hordeCheckTimeout = setTimeout(() => {
         // Check if player has activated protection
-        if (
-          this.isDarknessActive &&
-          !this.hordeSpawned &&
-          !this.isLightBoostActive &&
-          !this.isPotionActive
-        ) {
+        console.log("[Horde Debug] Checking Spawn Conditions:", {
+          active: this.isDarknessActive,
+          spawned: this.hordeSpawned,
+          light: this.isLightBoostActive,
+          potion: this.isPotionActive,
+        });
+
+        if (this.isDarknessActive && !this.hordeSpawned) {
+          console.log("[Horde Debug] Conditions met! Spawning Horde...");
           this.spawnZombieHorde();
+        } else {
+          console.log(
+            "[Horde Debug] Horde spawn blocked by state (Active: " +
+              this.isDarknessActive +
+              ", Spawned: " +
+              this.hordeSpawned +
+              ")",
+          );
         }
-      }, 2000); // 2 second grace period
+      }, 1000); // 1 second delay (reduced from 2s)
     }
 
     // End darkness after 20 seconds
@@ -1651,9 +1826,9 @@ export class Game {
       this.weatherManager.lockFogDensity(false);
     }
 
-    // Despawn horde zombies when darkness ends (they flee)
-    // Pass true to keep persistent persistent level bosses!
-    this.despawnHorde(true);
+    // NOTE: We NO LONGER despawn horde entities when darkness ends!
+    // Entities persist until killed by player or level restarts.
+    // This makes gameplay more consistent and prevents visual bugs.
 
     this.ui.showToast("☀️ Light returns!", "wb_sunny");
   }
@@ -1678,6 +1853,9 @@ export class Game {
     const totalNeeded =
       hordeConfig.bossCount + hordeConfig.zombieCount + hordeConfig.dogCount;
     const spawnPositions = this.findHordeSpawnPositions(totalNeeded);
+    console.log(
+      `[Horde Debug] Found ${spawnPositions.length} spawn positions for ${totalNeeded} entities (Boss: ${hordeConfig.bossCount}, Zombie: ${hordeConfig.zombieCount}, Dog: ${hordeConfig.dogCount})`,
+    );
 
     if (spawnPositions.length < 1) {
       console.warn("Could not find spawn positions for horde");
@@ -1723,9 +1901,7 @@ export class Game {
         boss.eyeGlow.distance = 8; // Larger glow radius
       }
 
-      console.log(
-        `Spawned horde BossZombie ${i + 1} at (${bossPos.x}, ${bossPos.z})`,
-      );
+      this.scene.add(boss.mesh);
       this.bossZombies.push(boss);
     }
 
@@ -1805,10 +1981,6 @@ export class Game {
 
       this.hordeDogs.push(dog);
     }
-
-    console.log(
-      `Horde spawned: 1 boss, ${this.hordeZombies.length} zombies, ${this.hordeDogs.length} dogs`,
-    );
   }
 
   /**
@@ -1893,17 +2065,11 @@ export class Game {
       const beforeCount = this.bossZombies.length;
       this.bossZombies = this.bossZombies.filter((boss) => {
         if (boss.isPersistent) {
-          console.log(
-            `Keeping persistent boss at (${boss.gridX}, ${boss.gridZ})`,
-          );
           return true;
         }
         boss.dispose();
         return false;
       });
-      console.log(
-        `despawnHorde: Kept ${this.bossZombies.length}/${beforeCount} persistent bosses`,
-      );
     } else {
       this.bossZombies.forEach((boss) => boss.dispose());
       this.bossZombies = [];
@@ -1926,9 +2092,6 @@ export class Game {
     // Only set hordeSpawned to false if we actually cleared everything
     // If persistent bosses remain, we should track that the event horde is gone but bosses remain
     if (hordeZombieCount > 0 || hordeDogCount > 0) {
-      console.log(
-        `despawnHorde: Cleared ${hordeZombieCount} horde zombies, ${hordeDogCount} horde dogs`,
-      );
     }
 
     // Reset horde spawned flag - this only affects whether NEW horde can spawn
@@ -2552,9 +2715,6 @@ export class Game {
             : boss.isPersistent
               ? "Bigfoot Boss"
               : "Boss";
-          console.log(
-            `Killing ${bossType} at index ${i}, ${this.bossZombies.length - 1} bosses will remain`,
-          );
 
           // KILL BOSS with explosion effect!
           boss.explode();
@@ -2586,10 +2746,6 @@ export class Game {
 
           this.cameraShake = 1.0; // Big shake for boss kill
           if (navigator.vibrate) navigator.vibrate([50, 30, 100]);
-
-          console.log(
-            `${bossType} killed. Remaining bosses: ${this.bossZombies.length}`,
-          );
         } else {
           this.onZombieHit();
           return;
@@ -2763,11 +2919,19 @@ export class Game {
   onZombieHit() {
     if (this.gameOverTriggered) return;
 
+    // Check invincibility frames - prevents rapid consecutive hits
+    if (this.invincibilityFrames > 0) {
+      return; // Still invincible, ignore hit
+    }
+
     // Shield protection - absorbs one hit
     if (this.isShieldActive) {
       this.isShieldActive = false;
       this.activePowerUp = null;
       this.powerUpTimer = 0;
+
+      // Grant invincibility frames after shield absorbs hit
+      this.invincibilityFrames = 90; // ~1.5 seconds at 60fps
 
       // Reset player color (respecting active potion)
       if (this.playerMesh && this.player) {
@@ -2821,6 +2985,9 @@ export class Game {
 
       // Ensure no zombies are camping the spawn point
       this.clearSafeZone();
+
+      // Grant invincibility frames after respawn
+      this.invincibilityFrames = 120; // ~2 seconds at 60fps
 
       // Show warning with lives remaining
       this.ui.showToast(
@@ -2880,8 +3047,10 @@ export class Game {
     this.isRunning = false;
     clearInterval(this.timerInterval);
 
-    // Clean up horde if active
-    this.despawnHorde();
+    // NOTE: We NO LONGER despawn horde here!
+    // When player clicks "Retry", resetGame() will call createZombies()
+    // which properly clears and recreates all entities.
+    // This prevents the Bigfoot disappearance bug.
     this.isDarknessActive = false;
     this.weatherManager?.stopStorm();
 
@@ -3050,7 +3219,6 @@ export class Game {
     // MANDATORY: Auto-post game record as custom_json (for leaderboards/restore)
     // This is separate from the optional Share blog post button
     if (steemIntegration.isConnected && steemIntegration.username) {
-      console.log("Posting game record (custom_json) to Steem blockchain...");
       try {
         const gameRecord = {
           level: this.level,
@@ -3075,7 +3243,6 @@ export class Game {
 
         const result = await steemIntegration.postGameRecord(gameRecord);
         if (result) {
-          console.log("✓ Game record saved to blockchain!");
           steemIntegration.registerActivePlayer(steemIntegration.username);
           this.ui.showToast("🎮 Game record saved!", "check_circle");
         }
@@ -3088,13 +3255,6 @@ export class Game {
 
   async postToSteem(score, stars) {
     try {
-      console.log(
-        "postToSteem called - isConnected:",
-        steemIntegration.isConnected,
-        "username:",
-        steemIntegration.username,
-      );
-
       if (!steemIntegration.isConnected || !steemIntegration.username) {
         console.warn("Not connected to Steem, skipping post");
         this.ui.showToast("Not connected to Steem wallet");
@@ -3124,9 +3284,7 @@ export class Game {
         ),
       };
 
-      console.log("Posting game record to Steem:", gameRecord);
       const result = await steemIntegration.postGameRecord(gameRecord);
-      console.log("Game posted to Steem:", result);
 
       if (result) {
         // Register player as active
@@ -3190,9 +3348,7 @@ export class Game {
    */
   reloadLevelFromData() {
     const newLevel = this.gameData.get("currentLevel") || 1;
-    console.log(
-      `Game: Reloading level from data: ${this.level} -> ${newLevel}`,
-    );
+
     this.level = newLevel;
 
     // Update display
@@ -3224,8 +3380,6 @@ export class Game {
     if (coinsDisplay) {
       coinsDisplay.textContent = this.totalCoins;
     }
-
-    console.log(`Game: Level set to ${this.level}, coins: ${this.totalCoins}`);
   }
 
   restartLevel() {
@@ -3275,6 +3429,7 @@ export class Game {
     this.isTimeFreezeActive = false;
     this.isMagnetActive = false;
     this.isDoubleScoreActive = false;
+    this.invincibilityFrames = 0;
 
     if (this.timerInterval) clearInterval(this.timerInterval);
 
@@ -3581,10 +3736,40 @@ export class Game {
 
     // === COLLECTIBLES ANIMATION (delta-time based) ===
     // Goal animation using cached waves
+    // Goal animation (3D Portal)
     if (this.goal) {
-      this.goal.rotation.y += smoothDelta * 1.2;
-      this.goal.rotation.x += smoothDelta * 0.6;
-      this.goal.position.y = 1.5 + animationCache.getWave(0.3, 0.2);
+      // Bob entire goal slightly
+      this.goal.position.y = 1.5 + Math.sin(Date.now() * 0.002) * 0.1;
+
+      // Animate parts
+      if (this.portalParts) {
+        this.portalParts.forEach((part) => {
+          if (part.mesh) {
+            // Generic axis rotation
+            if (part.axis === "x")
+              part.mesh.rotation.x += smoothDelta * part.speed;
+            else if (part.axis === "y")
+              part.mesh.rotation.y += smoothDelta * part.speed;
+            else if (part.axis === "z")
+              part.mesh.rotation.z += smoothDelta * part.speed;
+            // Legacy fallbacks (if axis not specified)
+            else if (part.isParticles) {
+              part.mesh.rotation.y += smoothDelta * part.speed;
+              part.mesh.rotation.z += smoothDelta * 0.2;
+            } else {
+              part.mesh.rotation.z += smoothDelta * part.speed;
+            }
+          }
+          if (part.light) {
+            part.light.intensity =
+              part.baseIntensity + Math.sin(Date.now() * 0.005) * 0.5;
+          }
+        });
+      } else {
+        // Fallback for old goal style if portalParts missing
+        this.goal.rotation.y += smoothDelta * 1.2;
+        this.goal.rotation.x += smoothDelta * 0.6;
+      }
     }
 
     // Gem animation using cached waves with offset
@@ -3596,6 +3781,32 @@ export class Game {
     });
 
     // === GAME LOGIC UPDATES ===
+    // Decrement invincibility frames
+    if (this.invincibilityFrames > 0) {
+      this.invincibilityFrames--;
+
+      // Blink player exactly 3 times at the START of invincibility
+      // Only blink during the first 36 frames (3 blinks at 12 frames each)
+      if (this.playerMesh) {
+        const blinkPeriod = 12; // frames per blink cycle (on/off)
+        const blinkDuration = 36; // total frames for 3 blinks
+        const framesFromStart =
+          (this.invincibilityFrames > 120 ? 90 : 120) -
+          this.invincibilityFrames;
+
+        if (framesFromStart < blinkDuration) {
+          // During blink phase: toggle visibility every blinkPeriod/2 frames
+          this.playerMesh.visible =
+            Math.floor(framesFromStart / (blinkPeriod / 2)) % 2 === 0;
+        } else {
+          // After blink phase: stay visible (but still invincible)
+          this.playerMesh.visible = true;
+        }
+      }
+    } else if (this.playerMesh && !this.playerMesh.visible) {
+      this.playerMesh.visible = true; // Ensure visible when invincibility ends
+    }
+
     this.updatePowerUps();
     this.updatePotion();
     this.updateCoins();
