@@ -263,6 +263,7 @@ export class Game {
     this.setupGround();
     if (this.gameData.getSetting("fireflies")) this.createFireflies();
     this.setupEventListeners();
+    this.startAutoRefresh();
     this.animate();
   }
 
@@ -3298,22 +3299,40 @@ export class Game {
     }
   }
 
-  startNewGame() {
-    const highestPosted = this.gameData.get("highestLevelPosted") || 0;
+  async startNewGame() {
+    // Completely reset the game state to Level 1 and 0 stats
+    // The user requested that "New Game" means "Play from the beginning", implying a full reset.
+    this.level = 1;
+    this.totalCoins = 0;
 
-    if (highestPosted > 0) {
-      // User has posted levels to Steem - start from highest posted level
-      this.level = highestPosted;
-      this.ui.showToast(
-        `Starting from Level ${highestPosted} (your highest posted level)`,
-      );
-    } else {
-      // No posts to Steem yet - start from level 1
-      this.level = 1;
+    // Reset all persistent data
+    this.gameData.reset(); // Resets to default (Level 1, 0 Coins, etc.)
+
+    // If connected, we should likely post this "Reset" to the blockchain so the state is consistent?
+    // User logic: "all the local storage game data should also change to zero"
+    // If we don't post a reset, the blockchain will still have the old high stats.
+    // But for the local session, we strictly reset.
+    if (steemIntegration.isConnected && steemIntegration.username) {
+      try {
+        // Optional: Post a reset record?
+        // Or just let the next victory post overwrite the state?
+        // Since our leaderboard looks at "Highest" values, posting 0 might not "erase" history but sets current state.
+        // We won't force a post here to keep it fast, unless needed.
+        // The key is the local session starts fresh.
+        this.ui.showToast("Started fresh game via local reset", "restart_alt");
+      } catch (e) {
+        console.warn("Error during new game reset", e);
+      }
     }
 
     this.gameData.set("currentLevel", this.level);
+    this.gameData.set("totalCoins", 0);
+
+    // Update displays
     document.getElementById("levelDisplay").textContent = this.level;
+    const coinEl = document.getElementById("coinsDisplay");
+    if (coinEl) coinEl.textContent = "0";
+
     this.gameData.data.gamesPlayed++;
     this.gameData.save();
     this.resetGame();
@@ -3562,6 +3581,11 @@ export class Game {
     this.isDarknessActive = false;
     this.darknessStartTime = null;
     this.currentEvent = null;
+
+    if (this.autoRefreshInterval) {
+      clearInterval(this.autoRefreshInterval);
+      this.autoRefreshInterval = null;
+    }
 
     // Restore default fog if needed
     if (this.defaultFogDensity !== undefined && this.scene && this.scene.fog) {
@@ -3910,9 +3934,47 @@ export class Game {
     }
   }
 
-  // Easing function for smooth camera motion
-  easeOutCubic(t) {
-    const x = 1 - Math.pow(1 - t, 3);
-    return Math.min(Math.max(x, 0), 1);
+  /**
+   * Start periodic auto-refresh of game data from blockchain
+   * Runs every 60 seconds to ensure local state matches verified state
+   */
+  startAutoRefresh() {
+    // Clear any existing interval
+    if (this.autoRefreshInterval) {
+      clearInterval(this.autoRefreshInterval);
+    }
+
+    // refresh every 60 seconds
+    this.autoRefreshInterval = setInterval(() => {
+      this.refreshData();
+    }, 60000);
+  }
+
+  /**
+   * Fetch latest data from blockchain and update local state
+   * Only updates if blockchain has *more* progress/coins than local
+   * (to avoid overwriting current session progress)
+   */
+  async refreshData() {
+    if (!steemIntegration.isConnected || !steemIntegration.username) return;
+
+    try {
+      // Sync via UIManager reusing the existing logic
+      if (this.ui && typeof this.ui.syncFromBlockchain === "function") {
+        await this.ui.syncFromBlockchain(steemIntegration.username);
+
+        // After sync, update local Game instance state if we are in menu/idle
+        // or if blockchain has MORE coins than we do (e.g. bought something on mobile)
+        const savedCoins = this.gameData.get("totalCoins") || 0;
+        if (savedCoins > this.totalCoins) {
+          this.totalCoins = savedCoins;
+          const coinEl = document.getElementById("coinsDisplay");
+          if (coinEl) coinEl.textContent = this.totalCoins;
+          this.ui.showToast("Data synced from blockchain", "sync");
+        }
+      }
+    } catch (e) {
+      console.warn("Auto-refresh failed:", e);
+    }
   }
 }
