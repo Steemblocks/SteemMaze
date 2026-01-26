@@ -315,16 +315,15 @@ export class UIManager {
     // Settings
     this.setupSettingsListeners();
 
-    // Blockchain records
-    document
-      .getElementById("viewBlockchainBtn")
-      ?.addEventListener("click", () => {
-        const username =
-          this.gameData.data.steemUsername || this.gameData.data.playerName;
-        const url = `https://steemit.com/@${username}/created`;
-        window.open(url, "_blank");
-      });
-
+    // View Blockchain Records
+    const viewBlockchainBtn = document.getElementById("viewBlockchainBtn");
+    if (viewBlockchainBtn) {
+      viewBlockchainBtn.onclick = () => {
+        const username = this.gameData.data.steemUsername || "steemmaze";
+        // Open specifically the posts by this user
+        window.open(`https://steemit.com/@${username}/posts`, "_blank");
+      };
+    }
     // Restore from blockchain
     document
       .getElementById("restoreFromBlockchainBtn")
