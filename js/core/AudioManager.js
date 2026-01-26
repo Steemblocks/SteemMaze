@@ -62,20 +62,39 @@ export class AudioManager {
   /**
    * Attempt to reload a failed audio file
    */
-  reloadSound(name, path) {
-    // Add cache-busting parameter to force fresh load
-    const cacheBuster = `?t=${Date.now()}`;
-    const audio = new Audio(path + cacheBuster);
+  reloadSound(name, path, retryCount = 0) {
+    if (retryCount > 1) {
+      console.warn(
+        `Audio "${name}" failed to reload after retry, will be skipped`,
+      );
+      this.sounds[name] = null;
+      return;
+    }
+
+    // First retry: try clean path again (sometimes fixes intermittent network issues)
+    // Second retry: try with cache buster
+    const src = retryCount === 0 ? path : `${path}?t=${Date.now()}`;
+    const audio = new Audio(src);
     audio.preload = "auto";
 
     audio.addEventListener("canplaythrough", () => {
       this.sounds[name] = audio;
+      // Re-initialize pool if needed
+      if (
+        [
+          "dogBark",
+          "zombieGrowl",
+          "monsterGrowl",
+          "explosion",
+          "footsteps",
+        ].includes(name)
+      ) {
+        this.createSoundPool(name, 3);
+      }
     });
 
     audio.addEventListener("error", () => {
-      // Mark as failed - play() will silently skip it
-      this.sounds[name] = null;
-      console.warn(`Audio "${name}" failed to reload, will be skipped`);
+      this.reloadSound(name, path, retryCount + 1);
     });
   }
 

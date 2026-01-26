@@ -887,20 +887,23 @@ export class UIManager {
 
       const leaderboard = await steemIntegration.fetchGlobalLeaderboard(100);
 
-      if (leaderboard && leaderboard.length > 0) {
-        // Leaderboard already has rankScore from fetchGlobalLeaderboard
+      if (
+        leaderboard &&
+        (leaderboard.active.length > 0 || leaderboard.inactive.length > 0)
+      ) {
         // Update stored leaderboard
-        this.gameData.data.leaderboard = leaderboard;
+        this.gameData.data.leaderboard = leaderboard.active; // Keep active for compatibility
+        this.gameData.data.leaderboardInactive = leaderboard.inactive; // Store inactive separately
         this.gameData.save();
 
         this.updateLeaderboard("score");
         this.showToast(
-          `Leaderboard updated! ${leaderboard.length} players found`,
+          `Leaderboard updated! ${leaderboard.active.length} active players`,
         );
       } else {
         this.showToast("No players found on blockchain yet", "info");
-        // Clear old leaderboard data
         this.gameData.data.leaderboard = [];
+        this.gameData.data.leaderboardInactive = [];
         this.gameData.save();
         this.updateLeaderboard("score");
       }
@@ -913,13 +916,26 @@ export class UIManager {
   }
 
   updateLeaderboard(tab = "score") {
-    const lb = this.gameData.data.leaderboard;
+    let activePlayers = this.gameData.data.leaderboard || [];
+    let inactivePlayers = this.gameData.data.leaderboardInactive || [];
 
-    if (!lb || lb.length === 0) {
-      document.getElementById("leaderboardList").innerHTML =
-        `<div style="text-align: center; padding: 20px; color: #aaa;">
+    // Handle legacy data format (array only)
+    if (Array.isArray(this.gameData.data.leaderboard)) {
+      if (!this.gameData.data.leaderboardInactive) {
+        // If no inactive list exists yet, assume all are active for now
+        activePlayers = this.gameData.data.leaderboard;
+        inactivePlayers = [];
+      }
+    }
+
+    const list = document.getElementById("leaderboardList");
+    const inactiveList = document.getElementById("inactivePlayersList");
+
+    if (activePlayers.length === 0 && inactivePlayers.length === 0) {
+      list.innerHTML = `<div style="text-align: center; padding: 20px; color: #aaa;">
           No players found yet. Play and share your records to appear on the leaderboard!
         </div>`;
+      inactiveList.innerHTML = "";
       document.getElementById("playerRank").textContent = "--";
       document.getElementById("playerRankName").textContent =
         this.gameData.data.playerName;
@@ -927,21 +943,21 @@ export class UIManager {
       return;
     }
 
-    const sorted = [...lb].sort((a, b) => {
-      if (tab === "score") return b.score - a.score;
+    // --- Active Players Logic ---
+    const sorted = [...activePlayers].sort((a, b) => {
+      if (tab === "score") return (b.score || 0) - (a.score || 0);
       if (tab === "time") {
-        // Lower time is better, handle null/undefined times
-        const aTime = a.bestTime || Infinity;
-        const bTime = b.bestTime || Infinity;
+        // Lower time is better, active players should have time
+        const aTime = a.bestTime === null ? Infinity : a.bestTime;
+        const bTime = b.bestTime === null ? Infinity : b.bestTime;
         return aTime - bTime;
       }
-      if (tab === "level") return b.highestLevel - a.highestLevel;
-      return b.score - a.score; // default to score
+      if (tab === "level") return (b.highestLevel || 0) - (a.highestLevel || 0);
+      return (b.rankScore || 0) - (a.rankScore || 0); // Default for Rank/Other
     });
 
-    const list = document.getElementById("leaderboardList");
     list.innerHTML = sorted
-      .slice(0, 10)
+      .slice(0, 100) // Show top 100 active
       .map((entry, i) => {
         let val;
         if (tab === "score") {
@@ -968,29 +984,49 @@ export class UIManager {
       })
       .join("");
 
+    // --- Inactive Players Logic ---
+    if (inactivePlayers.length > 0) {
+      document.querySelector(".inactive-players-section").style.display =
+        "block";
+      inactiveList.innerHTML = inactivePlayers
+        .map((entry) => {
+          const steemUsername = entry.steemUsername || entry.name;
+          const avatarUrl = `https://steemitimages.com/u/${steemUsername}/avatar`;
+          return `<div class="leaderboard-entry">
+            <span class="entry-rank">-</span>
+            <img class="entry-avatar" src="${avatarUrl}" alt="${steemUsername}" onerror="this.style.display='none'">
+            <span class="entry-name">${entry.name}</span>
+            <span class="entry-value" style="font-size: 0.7rem; opacity: 0.7;">No Recent Data</span>
+          </div>`;
+        })
+        .join("");
+    } else {
+      document.querySelector(".inactive-players-section").style.display =
+        "none";
+    }
+
+    // --- Player Rank Card Logic ---
     const d = this.gameData.data;
     let playerVal = "--";
     let playerRank = sorted.length + 1;
 
-    if (tab === "score") {
-      playerVal = d.bestScore || 0;
-      playerRank = sorted.findIndex((e) => (d.bestScore || 0) >= e.score);
-    } else if (tab === "time") {
-      playerVal = d.bestTime ? this.formatTime(d.bestTime) : "--";
-      playerRank = sorted.findIndex((e) => {
-        const eTime = e.bestTime || Infinity;
-        return d.bestTime && d.bestTime <= eTime;
-      });
-    } else if (tab === "level") {
-      playerVal = `Lv.${d.highestLevel || 1}`;
-      playerRank = sorted.findIndex(
-        (e) => (d.highestLevel || 0) >= e.highestLevel,
-      );
+    // Check if player is in the sorted list to find true rank
+    const playerIndex = sorted.findIndex(
+      (p) => p.steemUsername === d.steemUsername,
+    );
+    if (playerIndex !== -1) {
+      playerRank = playerIndex + 1;
     }
 
-    document.getElementById("playerRank").textContent = `#${
-      playerRank === -1 ? sorted.length + 1 : playerRank + 1
-    }`;
+    if (tab === "score") {
+      playerVal = d.bestScore || 0;
+    } else if (tab === "time") {
+      playerVal = d.bestTime ? this.formatTime(d.bestTime) : "--";
+    } else if (tab === "level") {
+      playerVal = `Lv.${d.highestLevel || 1}`;
+    }
+
+    document.getElementById("playerRank").textContent = `#${playerRank}`;
     document.getElementById("playerRankName").textContent = d.playerName;
     document.getElementById("playerRankValue").textContent = playerVal;
   }

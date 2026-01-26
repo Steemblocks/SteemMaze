@@ -1586,6 +1586,36 @@ body {
   text-shadow: 0 0 10px rgba(74, 222, 128, 0.3);
 }
 
+/* Inactive Players Section */
+.inactive-players-section {
+  margin-top: var(--space-xl);
+  padding-top: var(--space-md);
+  border-top: 1px dashed var(--glass-border);
+}
+
+.inactive-title {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-bottom: var(--space-md);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.leaderboard-list.inactive {
+  opacity: 0.7;
+}
+
+.leaderboard-list.inactive .leaderboard-entry {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: transparent;
+}
+
+.leaderboard-list.inactive .entry-value {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
 /* Settings */
 .settings-section {
   background: var(--glass);

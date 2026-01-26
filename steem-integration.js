@@ -265,7 +265,9 @@ export class SteemIntegration {
 
       const history = result.result || [];
 
-      // Find the most recent steemmaze_players custom_json
+      // Scan ALL history for relevant custom_json operations
+      let foundPlayers = new Set();
+
       for (const entry of history) {
         if (!Array.isArray(entry) || entry.length < 2) continue;
 
@@ -281,11 +283,11 @@ export class SteemIntegration {
           try {
             const json = JSON.parse(opData.json);
             if (json.players && Array.isArray(json.players)) {
-              // Merge with local registry
-              json.players.forEach((p) => this.playerRegistry.add(p));
-              this.savePlayerRegistry();
-
-              return json.players;
+              // Add ALL players found in this update to our set
+              json.players.forEach((p) => {
+                this.playerRegistry.add(p);
+                foundPlayers.add(p);
+              });
             }
           } catch (e) {
             console.warn("Failed to parse registry JSON:", e);
@@ -293,7 +295,8 @@ export class SteemIntegration {
         }
       }
 
-      return [];
+      this.savePlayerRegistry();
+      return Array.from(foundPlayers);
     } catch (error) {
       console.error("Failed to fetch player registry:", error);
       return [];
@@ -884,8 +887,8 @@ ${
       // Fetch records for each known player
       for (const username of uniquePlayers) {
         try {
-          // Fetch more records to scan for true highest values (200 games covers most players)
-          const records = await this.fetchPlayerGameRecords(username, 200);
+          // Fetch more records to scan for true highest values (1000 to cover active users)
+          const records = await this.fetchPlayerGameRecords(username, 1000);
 
           if (records.length > 0) {
             totalRecordsFound += records.length;
@@ -977,37 +980,48 @@ ${
         }
       }
 
-      // Calculate rankings (each player appears only ONCE)
-      const leaderboard = Object.values(playerStats)
-        .map((player) => {
-          const rankScore = this.calculatePlayerRank({
-            score: player.score,
-            highestLevel: player.highestLevel,
-            bestTime: player.bestTime,
-            threeStarGames: player.threeStarGames,
-            totalGemsCollected: player.totalGemsCollected,
-            gamesCount: player.gamesCount,
-          });
+      // Calculate rankings
+      const allPlayers = Object.values(playerStats).map((player) => {
+        const rankScore = this.calculatePlayerRank({
+          score: player.score,
+          highestLevel: player.highestLevel,
+          bestTime: player.bestTime,
+          threeStarGames: player.threeStarGames,
+          totalGemsCollected: player.totalGemsCollected,
+          gamesCount: player.gamesCount,
+        });
 
-          return {
-            ...player,
-            rankScore,
-          };
-        })
+        return {
+          ...player,
+          rankScore,
+        };
+      });
+
+      // Filter Active vs Inactive
+      const activePlayers = allPlayers
         .filter((p) => p.gamesCount > 0)
         .sort((a, b) => b.rankScore - a.rankScore)
         .slice(0, limit);
+
+      const inactivePlayers = allPlayers
+        .filter((p) => p.gamesCount === 0)
+        .sort((a, b) => a.steemUsername.localeCompare(b.steemUsername));
+
+      const leaderboardData = {
+        active: activePlayers,
+        inactive: inactivePlayers,
+      };
 
       // Cache the leaderboard with timestamp
       localStorage.setItem(
         "steemmaze_leaderboard_cache",
         JSON.stringify({
-          data: leaderboard,
+          data: leaderboardData,
           timestamp: Date.now(),
         }),
       );
 
-      return leaderboard;
+      return leaderboardData;
     } catch (error) {
       console.error("Error fetching global leaderboard:", error);
 
@@ -1015,11 +1029,14 @@ ${
       const cached = localStorage.getItem("steemmaze_leaderboard_cache");
       if (cached) {
         const { data } = JSON.parse(cached);
-
-        return data || [];
+        // Handle legacy cache format (which was just an array)
+        if (Array.isArray(data)) {
+          return { active: data, inactive: [] };
+        }
+        return data || { active: [], inactive: [] };
       }
 
-      return [];
+      return { active: [], inactive: [] };
     }
   }
 
@@ -1027,73 +1044,19 @@ ${
    * Fetch game records for a specific player from their account history
    * This is much faster than scanning all blocks
    */
-  async fetchPlayerGameRecords(username, maxRecords = 50) {
+  async fetchPlayerGameRecords(username, maxRecords = 1000) {
     try {
-      const response = await fetch(this.currentNodeUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "condenser_api.get_account_history",
-          params: [username, -1, 1000], // Last 1000 transactions to capture full game history
-          id: 1,
-        }),
-      });
+      // Delegate to the robust pagination method
+      const records = await this.fetchGameRecordsFromCustomJson(
+        username,
+        maxRecords,
+      );
 
-      if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`);
+      if (records.length > 0) {
+        this.registerActivePlayer(username);
       }
 
-      const result = await response.json();
-
-      if (result.error) {
-        throw new Error(result.error.message || "API error");
-      }
-
-      const history = result.result || [];
-      const gameRecords = [];
-
-      for (const entry of history) {
-        if (!Array.isArray(entry) || entry.length < 2) continue;
-
-        const operation = entry[1];
-        if (!operation || !operation.op) continue;
-
-        const [opType, opData] = operation.op;
-
-        if (opType === "custom_json" && opData.id === "steemmaze_game_record") {
-          try {
-            const json = JSON.parse(opData.json);
-
-            if (json.app === "steemmaze" && json.game) {
-              gameRecords.push({
-                game: json.game,
-                stats: json.stats,
-                timestamp: operation.timestamp,
-                block: operation.block,
-              });
-
-              // Register this player as active
-              this.registerActivePlayer(username);
-
-              if (gameRecords.length >= maxRecords) break;
-            }
-          } catch (e) {
-            continue;
-          }
-        }
-      }
-
-      // Sort by timestamp (newest first) to ensure most recent is at index 0
-      gameRecords.sort((a, b) => {
-        const timeA = new Date(a.timestamp).getTime();
-        const timeB = new Date(b.timestamp).getTime();
-        return timeB - timeA;
-      });
-
-      return gameRecords;
+      return records;
     } catch (error) {
       console.warn(`Error fetching records for ${username}:`, error.message);
       return [];
