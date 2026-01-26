@@ -51,8 +51,7 @@ export class GameData {
           ...parsed,
           settings: { ...this.getDefault().settings, ...parsed.settings },
         };
-        // Always reset leaderboard to empty - it will be fetched from blockchain
-        merged.leaderboard = [];
+        // merged.leaderboard = []; // Keep cached leaderboard for instant UI!
         return merged;
       }
     } catch (e) {

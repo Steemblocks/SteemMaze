@@ -867,9 +867,17 @@ export class UIManager {
         "cloud_download",
       );
 
-      // Show loading state in leaderboard list
+      // Show loading state OR show cached data immediately
       const listEl = document.getElementById("leaderboardList");
-      if (listEl) {
+
+      // If we have cached data, show it first!
+      if (
+        this.gameData.data.leaderboard &&
+        this.gameData.data.leaderboard.length > 0
+      ) {
+        this.updateLeaderboard("score");
+      } else if (listEl) {
+        // Only show spinner if we have absolutely nothing to show
         listEl.innerHTML = `
           <div style="text-align: center; padding: 40px; color: #aaa;">
             <span class="material-icons-round" style="font-size: 48px; animation: spin 1s linear infinite;">sync</span>
