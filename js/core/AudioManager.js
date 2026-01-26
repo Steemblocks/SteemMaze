@@ -31,7 +31,7 @@ export class AudioManager {
     this.loadSound("monsterGrowl", "/audio/monster_growl.mp3");
     this.loadSound("dogBark", "/audio/dog_bark.mp3");
     this.loadSound("bigfootRoar", "/audio/bigfoot_roar.mp3");
-    this.loadSound("bigfootRoar", "/audio/bigfoot_roar.mp3");
+
     this.loadSound("bossSpawn", "/audio/boss_spawn.mp3");
     this.loadSound("footsteps", "/audio/footsteps_grass.mp3");
 

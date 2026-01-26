@@ -1,16 +1,20 @@
 const CACHE_NAME = "steemmaze-v1";
 
 // Assets to cache immediately for offline capability
-const PRECACHE_ASSETS = [
-  "/",
-  "/index.html",
-  "/style.css",
-  "/logo.png",
-  "/favicon.png",
-];
+const PRECACHE_ASSETS = ["/", "/index.html", "/logo.png", "/favicon.png"];
 
-// Runtime caching rule: Cache audio and textures as they are used
-const ASSET_EXTENSIONS = [".mp3", ".png", ".jpg", ".jpeg", ".glb", ".gltf"];
+// Runtime caching rule: Cache audio, textures, and bundled code as they are used
+const ASSET_EXTENSIONS = [
+  ".mp3",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".glb",
+  ".gltf",
+  ".css",
+  ".js",
+  ".json",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
