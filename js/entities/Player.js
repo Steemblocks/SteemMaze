@@ -13,9 +13,10 @@
 import * as THREE from "three";
 
 export class Player {
-  constructor(scene, cellSize) {
+  constructor(scene, cellSize, audioManager) {
     this.scene = scene;
     this.cellSize = cellSize;
+    this.audioManager = audioManager;
 
     // Animation state
     this.animationTime = 0;
@@ -244,6 +245,25 @@ export class Player {
     const legSwing = Math.sin(this.animationTime * walkSpeed) * 0.5;
     const armSwing = Math.sin(this.animationTime * walkSpeed) * 0.4;
 
+    // Detect footstep (zero crossing of sine wave indicates foot strike)
+    // We check if the sine wave crossed from positive to negative or vice versa in this frame
+    const prevLegSwing =
+      Math.sin((this.animationTime - 0.016) * walkSpeed) * 0.5;
+
+    // Footstrike happens when leg swing is near 0 (passing each other)
+    // Or we can key it to the peaks (max extension). Let's try max extension for "step" feeling.
+    // Actually, simple timer is often better than trying to derive from sin wave frames.
+
+    // Simple Interval-based footsteps synced to walk speed
+    // walkSpeed 12 is fast, let's play step every 0.35s approx
+    if (!this.lastStepTime) this.lastStepTime = 0;
+    if (this.animationTime - this.lastStepTime > 0.35) {
+      if (this.audioManager) {
+        this.audioManager.playFootsteps();
+      }
+      this.lastStepTime = this.animationTime;
+    }
+
     // Legs swing opposite to each other
     if (this.leftLegPivot) {
       this.leftLegPivot.rotation.x = legSwing;
@@ -409,7 +429,7 @@ export class Player {
       particle.userData.velocity = new THREE.Vector3(
         (Math.random() - 0.5) * 0.5,
         0.15 + Math.random() * 0.35,
-        (Math.random() - 0.5) * 0.5
+        (Math.random() - 0.5) * 0.5,
       );
 
       particle.userData.gravity = -0.018;
@@ -534,7 +554,7 @@ export class Player {
       particle.userData.velocity = new THREE.Vector3(
         (Math.random() - 0.5) * 0.7,
         0.2 + Math.random() * 0.4,
-        (Math.random() - 0.5) * 0.7
+        (Math.random() - 0.5) * 0.7,
       );
 
       particle.userData.gravity = -0.012; // Slower gravity for longer hang time

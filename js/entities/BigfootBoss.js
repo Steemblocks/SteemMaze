@@ -72,72 +72,107 @@ export class BigfootBoss {
     this.loadModel();
   }
 
+  static modelTemplate = null;
+  static textureCache = null;
+
   loadModel() {
+    // If template exists, clone it immediately
+    if (BigfootBoss.modelTemplate) {
+      this.initFromTemplate(BigfootBoss.modelTemplate);
+      return;
+    }
+
+    // Check if we are already loading (simple lock to prevent parallel loads of same asset)
+    if (BigfootBoss.isLoading) {
+      // Wait retry
+      setTimeout(() => this.loadModel(), 100);
+      return;
+    }
+
+    BigfootBoss.isLoading = true;
     const loader = new GLTFLoader();
 
     loader.load(
       "/models/bigfoot.glb",
       (gltf) => {
-        // If entity was destroyed while loading, abort and cleanup
-        if (this.isDisposed) {
-          return;
-        }
+        BigfootBoss.modelTemplate = gltf; // Cache the whole gltf result
+        BigfootBoss.isLoading = false;
 
-        // Remove debug placeholder
-        if (this.placeholder) {
-          this.mesh.remove(this.placeholder);
-        }
-
-        this.model = gltf.scene;
-
-        // SCALE: Adjusted to 3.0 as requested (smaller but still big)
-        const scale = 3.0;
-        this.model.scale.set(scale, scale, scale);
-
-        // Pivot adjustment (center it)
-        this.model.position.y = 0;
-
-        this.model.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-            // Boost material brightness
-            if (child.material) {
-              child.material.emissive = new THREE.Color(0x222222); // Slight self-illumination
-              child.material.emissiveIntensity = 0.2;
-              child.material.metalness = 0.3;
-              child.material.roughness = 0.7;
-            }
-          }
-        });
-
-        this.mesh.add(this.model);
-        // this.scene.add(this.mesh); // ALREADY ADDED IN CONSTRUCTOR
-
-        if (gltf.animations && gltf.animations.length > 0) {
-          this.mixer = new THREE.AnimationMixer(this.model);
-          this.animations = gltf.animations;
-
-          // Try to find a walk, run, or generic move animation
-          // Keywords: Walk, Run, Move, Action
-          let moveAnim = gltf.animations.find((a) =>
-            /walk|run|move|action/i.test(a.name),
-          );
-          if (!moveAnim) moveAnim = gltf.animations[0]; // Fallback
-
-          if (moveAnim) {
-            this.activeAction = this.mixer.clipAction(moveAnim);
-            this.activeAction.timeScale = 1.5; // Speed up animation
-            this.activeAction.play();
-          }
-        }
-
-        this.modelReady = true;
-        this.addBossEffects();
+        // Init this instance
+        this.initFromTemplate(gltf);
       },
       undefined,
-      (error) => console.error("Error loading Bigfoot:", error),
+      (error) => {
+        console.error("Error loading Bigfoot:", error);
+        BigfootBoss.isLoading = false;
+      },
     );
+  }
+
+  initFromTemplate(gltf) {
+    // If entity was destroyed while loading, abort and cleanup
+    if (this.isDisposed) return;
+
+    // Remove debug placeholder
+    if (this.placeholder) {
+      this.mesh.remove(this.placeholder);
+    }
+
+    // CLONE the scene to get a unique instance
+    this.model = gltf.scene.clone();
+
+    // SCALE: Adjusted to 3.75 (25% bigger)
+    const scale = 3.75;
+    this.model.scale.set(scale, scale, scale);
+
+    // Pivot adjustment (center it)
+    this.model.position.y = 0;
+
+    // Re-bind materials/shadows (clone loses castShadow on generic traverse usually unless set)
+    this.model.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        // Boost material brightness
+        if (child.material) {
+          // We need to clone material if we want unique emissive blinking per boss?
+          // The original code set emissive directly.
+          // If we share cached materials from the clone, blinking one makes all blink (if they share the material object).
+          // Scene.clone() usually clones materials? No, Three.js clone() shares materials by default.
+          // So we MUST clone materials to have independent "hit" effects or emissive changes.
+          child.material = child.material.clone();
+
+          child.material.emissive = new THREE.Color(0x222222);
+          child.material.metalness = 0.3;
+          child.material.roughness = 0.7;
+        }
+
+        // Disable frustum culling to prevent disappearance at edges or during animations
+        child.frustumCulled = false;
+      }
+    });
+
+    this.mesh.add(this.model);
+
+    if (gltf.animations && gltf.animations.length > 0) {
+      this.mixer = new THREE.AnimationMixer(this.model);
+      this.animations = gltf.animations;
+
+      // Try to find a walk, run, or generic move animation
+      let moveAnim = gltf.animations.find((a) =>
+        /walk|run|move|action/i.test(a.name),
+      );
+      if (!moveAnim) moveAnim = gltf.animations[0]; // Fallback
+
+      if (moveAnim) {
+        this.activeAction = this.mixer.clipAction(moveAnim);
+        this.activeAction.timeScale = 1.5; // Speed up animation
+        this.activeAction.play();
+      }
+    }
+
+    this.modelReady = true;
+    this.addBossEffects();
   }
 
   addBossEffects() {

@@ -83,117 +83,190 @@ export class ZombieDog {
   /**
    * Create zombie dog mesh - decayed canine form
    */
-  createMesh() {
+  /**
+   * Static assets to prevent creating duplicate geometries and materials
+   */
+  static assets = null;
+  static masterMesh = null;
+
+  static getAssets() {
+    if (!ZombieDog.assets) {
+      const rottenColor = 0x3d3d2d;
+      const bloodColor = 0x660000;
+
+      ZombieDog.assets = {
+        bodyMat: new THREE.MeshStandardMaterial({
+          color: rottenColor,
+          emissive: 0x111111,
+          emissiveIntensity: 0.15,
+          roughness: 0.85,
+        }),
+        bloodMat: new THREE.MeshStandardMaterial({
+          color: bloodColor,
+          emissive: 0x220000,
+          emissiveIntensity: 0.2,
+          roughness: 0.7,
+        }),
+        eyeMat: new THREE.MeshBasicMaterial({ color: 0xff0000 }),
+        ribMat: new THREE.MeshStandardMaterial({ color: 0xccccaa }),
+
+        // Geometries
+        bodyGeo: new THREE.BoxGeometry(0.5, 0.35, 0.9),
+        headGeo: new THREE.BoxGeometry(0.25, 0.25, 0.35),
+        snoutGeo: new THREE.BoxGeometry(0.15, 0.12, 0.2),
+        eyeGeo: new THREE.SphereGeometry(0.04, 6, 6),
+        legGeo: new THREE.CylinderGeometry(0.06, 0.04, 0.4, 6),
+        tailGeo: new THREE.CylinderGeometry(0.03, 0.01, 0.4, 4),
+        ribGeo: new THREE.BoxGeometry(0.52, 0.02, 0.04),
+      };
+
+      // Create glow texture if missing
+      const canvas = document.createElement("canvas");
+      canvas.width = 64;
+      canvas.height = 64;
+      const context = canvas.getContext("2d");
+      const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gradient.addColorStop(0, "rgba(255, 200, 200, 1)");
+      gradient.addColorStop(0.2, "rgba(255, 0, 0, 1)");
+      gradient.addColorStop(0.5, "rgba(100, 0, 0, 0.4)");
+      gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 64, 64);
+      const tex = new THREE.CanvasTexture(canvas);
+      ZombieDog.assets.glowMat = new THREE.SpriteMaterial({
+        map: tex,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+    }
+    return ZombieDog.assets;
+  }
+
+  static initMasterMesh() {
+    if (ZombieDog.masterMesh) return;
+
+    const assets = ZombieDog.getAssets();
     const group = new THREE.Group();
 
-    // Rotten grayish-brown color
-    const rottenColor = 0x3d3d2d;
-    const bloodColor = 0x660000;
-
-    const bodyMaterial = new THREE.MeshStandardMaterial({
-      color: rottenColor,
-      emissive: 0x111111,
-      emissiveIntensity: 0.15,
-      roughness: 0.85,
-    });
-
-    const bloodMaterial = new THREE.MeshStandardMaterial({
-      color: bloodColor,
-      emissive: 0x220000,
-      emissiveIntensity: 0.2,
-      roughness: 0.7,
-    });
-
-    // Body - elongated
-    const bodyGeo = new THREE.BoxGeometry(0.5, 0.35, 0.9);
-    this.body = new THREE.Mesh(bodyGeo, bodyMaterial);
-    this.body.position.y = 0.5;
-    this.body.castShadow = true;
-    group.add(this.body);
+    // Body
+    const body = new THREE.Mesh(assets.bodyGeo, assets.bodyMat);
+    body.position.y = 0.5;
+    body.castShadow = true;
+    body.name = "body";
+    group.add(body);
 
     // Head
-    const headGeo = new THREE.BoxGeometry(0.25, 0.25, 0.35);
-    this.head = new THREE.Mesh(headGeo, bodyMaterial);
-    this.head.position.set(0, 0.6, 0.55);
-    this.head.castShadow = true;
-    group.add(this.head);
+    const head = new THREE.Mesh(assets.headGeo, assets.bodyMat);
+    head.position.set(0, 0.6, 0.55);
+    head.castShadow = true;
+    head.name = "head";
+    group.add(head);
 
     // Snout
-    const snoutGeo = new THREE.BoxGeometry(0.15, 0.12, 0.2);
-    const snout = new THREE.Mesh(snoutGeo, bloodMaterial);
+    const snout = new THREE.Mesh(assets.snoutGeo, assets.bloodMat);
     snout.position.set(0, 0.55, 0.75);
     group.add(snout);
 
-    // Glowing red eyes - MeshBasicMaterial doesn't support emissive
-    const eyeGeo = new THREE.SphereGeometry(0.04, 6, 6);
-    const eyeMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff0000,
-    });
-
-    const leftEye = new THREE.Mesh(eyeGeo, eyeMaterial);
+    // Eyes
+    const leftEye = new THREE.Mesh(assets.eyeGeo, assets.eyeMat);
     leftEye.position.set(-0.08, 0.65, 0.7);
     group.add(leftEye);
 
-    const rightEye = new THREE.Mesh(eyeGeo, eyeMaterial);
+    const rightEye = new THREE.Mesh(assets.eyeGeo, assets.eyeMat);
     rightEye.position.set(0.08, 0.65, 0.7);
     group.add(rightEye);
 
-    // Legs
-    const legGeo = new THREE.CylinderGeometry(0.06, 0.04, 0.4, 6);
+    // Glows
+    const eyeScale = 0.15;
+    const lGlow = new THREE.Sprite(assets.glowMat);
+    lGlow.scale.set(eyeScale, eyeScale, 1);
+    lGlow.position.set(0, 0, 0.05);
+    leftEye.add(lGlow);
+
+    const rGlow = new THREE.Sprite(assets.glowMat);
+    rGlow.scale.set(eyeScale, eyeScale, 1);
+    rGlow.position.set(0, 0, 0.05);
+    rightEye.add(rGlow);
 
     // Front legs
     const frontLeftLegPivot = new THREE.Group();
     frontLeftLegPivot.position.set(-0.18, 0.4, 0.3);
-    this.frontLeftLeg = new THREE.Mesh(legGeo, bodyMaterial);
-    this.frontLeftLeg.position.y = -0.2;
-    frontLeftLegPivot.add(this.frontLeftLeg);
+    frontLeftLegPivot.name = "frontLeftLegPivot";
+    const frontLeftLeg = new THREE.Mesh(assets.legGeo, assets.bodyMat);
+    frontLeftLeg.position.y = -0.2;
+    frontLeftLegPivot.add(frontLeftLeg);
     group.add(frontLeftLegPivot);
-    this.frontLeftLegPivot = frontLeftLegPivot;
 
     const frontRightLegPivot = new THREE.Group();
     frontRightLegPivot.position.set(0.18, 0.4, 0.3);
-    this.frontRightLeg = new THREE.Mesh(legGeo, bodyMaterial);
-    this.frontRightLeg.position.y = -0.2;
-    frontRightLegPivot.add(this.frontRightLeg);
+    frontRightLegPivot.name = "frontRightLegPivot";
+    const frontRightLeg = new THREE.Mesh(assets.legGeo, assets.bodyMat);
+    frontRightLeg.position.y = -0.2;
+    frontRightLegPivot.add(frontRightLeg);
     group.add(frontRightLegPivot);
-    this.frontRightLegPivot = frontRightLegPivot;
 
     // Back legs
     const backLeftLegPivot = new THREE.Group();
     backLeftLegPivot.position.set(-0.18, 0.4, -0.3);
-    this.backLeftLeg = new THREE.Mesh(legGeo, bodyMaterial);
-    this.backLeftLeg.position.y = -0.2;
-    backLeftLegPivot.add(this.backLeftLeg);
+    backLeftLegPivot.name = "backLeftLegPivot";
+    const backLeftLeg = new THREE.Mesh(assets.legGeo, assets.bodyMat);
+    backLeftLeg.position.y = -0.2;
+    backLeftLegPivot.add(backLeftLeg);
     group.add(backLeftLegPivot);
-    this.backLeftLegPivot = backLeftLegPivot;
 
     const backRightLegPivot = new THREE.Group();
     backRightLegPivot.position.set(0.18, 0.4, -0.3);
-    this.backRightLeg = new THREE.Mesh(legGeo, bodyMaterial);
-    this.backRightLeg.position.y = -0.2;
-    backRightLegPivot.add(this.backRightLeg);
+    backRightLegPivot.name = "backRightLegPivot";
+    const backRightLeg = new THREE.Mesh(assets.legGeo, assets.bodyMat);
+    backRightLeg.position.y = -0.2;
+    backRightLegPivot.add(backRightLeg);
     group.add(backRightLegPivot);
-    this.backRightLegPivot = backRightLegPivot;
 
-    // Tail - bony, hanging
-    const tailGeo = new THREE.CylinderGeometry(0.03, 0.01, 0.4, 4);
+    // Tail
     const tailPivot = new THREE.Group();
     tailPivot.position.set(0, 0.55, -0.45);
-    this.tail = new THREE.Mesh(tailGeo, bodyMaterial);
-    this.tail.position.y = -0.15;
-    this.tail.rotation.x = 0.5;
-    tailPivot.add(this.tail);
+    tailPivot.name = "tailPivot";
+    const tail = new THREE.Mesh(assets.tailGeo, assets.bodyMat);
+    tail.position.y = -0.15;
+    tail.rotation.x = 0.5;
+    tailPivot.add(tail);
     group.add(tailPivot);
-    this.tailPivot = tailPivot;
 
-    // Exposed ribs/bones
-    const ribMaterial = new THREE.MeshStandardMaterial({ color: 0xccccaa });
+    // Ribs
     for (let i = 0; i < 3; i++) {
-      const ribGeo = new THREE.BoxGeometry(0.52, 0.02, 0.04);
-      const rib = new THREE.Mesh(ribGeo, ribMaterial);
+      const rib = new THREE.Mesh(assets.ribGeo, assets.ribMat);
       rib.position.set(0, 0.55, 0.15 - i * 0.15);
       group.add(rib);
     }
+
+    ZombieDog.masterMesh = group;
+  }
+
+  /**
+   * Create zombie dog mesh using optimized cloning
+   */
+  createMesh() {
+    ZombieDog.initMasterMesh();
+
+    // Quick clone
+    const group = ZombieDog.masterMesh.clone();
+
+    // Re-bind references
+    this.body = group.getObjectByName("body");
+    this.head = group.getObjectByName("head");
+    this.frontLeftLegPivot = group.getObjectByName("frontLeftLegPivot");
+    this.frontRightLegPivot = group.getObjectByName("frontRightLegPivot");
+    this.backLeftLegPivot = group.getObjectByName("backLeftLegPivot");
+    this.backRightLegPivot = group.getObjectByName("backRightLegPivot");
+    this.tailPivot = group.getObjectByName("tailPivot");
+
+    // Animations references:
+    this.frontLeftLeg = this.frontLeftLegPivot.children[0];
+    this.frontRightLeg = this.frontRightLegPivot.children[0];
+    this.backLeftLeg = this.backLeftLegPivot.children[0];
+    this.backRightLeg = this.backRightLegPivot.children[0];
+    this.tail = this.tailPivot.children[0];
 
     return group;
   }
@@ -452,34 +525,46 @@ export class ZombieDog {
   /**
    * Explosion effect when killed - matches zombie explosion
    */
+  /**
+   * Explosion effect when killed - matches zombie explosion
+   */
   explode() {
     if (!this.mesh) return;
 
     const position = this.mesh.position.clone();
-    const particleCount = 20; // Slightly fewer than zombie since dog is smaller
+
+    // OPTIMIZATION: Reduced particle count
+    const particleCount = 10; // Was 20
     const particles = [];
+
+    // Reuse shared geometry from assets (optimized)
+    const assets = ZombieDog.getAssets();
+    const sharedGeo = assets.eyeGeo;
 
     // Colors for gore/explosion effect - dog colors
     const colors = [0x660000, 0x3d3d2d, 0x2d2d2d, 0x550000, 0x4a4a3a];
 
     for (let i = 0; i < particleCount; i++) {
-      // Random particle size
-      const size = 0.06 + Math.random() * 0.12;
-      const geo = new THREE.SphereGeometry(size, 6, 6);
-
       // Random color from gore palette
       const color = colors[Math.floor(Math.random() * colors.length)];
+
+      // Basic cheap material
       const mat = new THREE.MeshBasicMaterial({
         color: color,
         transparent: true,
         opacity: 1.0,
       });
 
-      const particle = new THREE.Mesh(geo, mat);
+      const particle = new THREE.Mesh(sharedGeo, mat);
 
       // Start at dog position
       particle.position.copy(position);
       particle.position.y += 0.5 + Math.random() * 0.3;
+
+      // Random scale (large chunks)
+      const initialScale = 3.0 + Math.random() * 3.0;
+      particle.scale.setScalar(initialScale);
+      particle.userData.initialScale = initialScale;
 
       // Random velocity - exploding outward
       particle.userData.velocity = new THREE.Vector3(
@@ -490,7 +575,7 @@ export class ZombieDog {
 
       particle.userData.gravity = -0.012;
       particle.userData.life = 1.0;
-      particle.userData.decay = 0.025 + Math.random() * 0.02;
+      particle.userData.decay = 0.02 + Math.random() * 0.02; // Slower decay
 
       this.scene.add(particle);
       particles.push(particle);
@@ -514,8 +599,13 @@ export class ZombieDog {
         p.material.opacity = Math.max(0, p.userData.life);
 
         // Shrink as it fades
-        const scale = Math.max(0.1, p.userData.life);
-        p.scale.setScalar(scale);
+        if (p.userData.initialScale) {
+          const currentScale = Math.max(
+            0.1,
+            p.userData.initialScale * p.userData.life,
+          );
+          p.scale.setScalar(currentScale);
+        }
 
         if (p.userData.life > 0) {
           activeCount++;
@@ -528,7 +618,7 @@ export class ZombieDog {
         // Cleanup particles
         particles.forEach((p) => {
           this.scene.remove(p);
-          p.geometry.dispose();
+          // Do NOT dispose sharedGeo
           p.material.dispose();
         });
       }
@@ -538,15 +628,16 @@ export class ZombieDog {
     requestAnimationFrame(animateParticles);
 
     // Add a quick flash at explosion point (orange-red for dog)
-    const flash = new THREE.PointLight(0xff4400, 2.5, 6);
+    // OPTIMIZATION: Reduced light
+    const flash = new THREE.PointLight(0xff4400, 2.0, 4);
     flash.position.copy(position);
     flash.position.y += 0.6;
     this.scene.add(flash);
 
     // Fade out flash
-    let flashIntensity = 2.5;
+    let flashIntensity = 2.0;
     const fadeFlash = () => {
-      flashIntensity -= 0.12;
+      flashIntensity -= 0.2;
       if (flashIntensity > 0) {
         flash.intensity = flashIntensity;
         requestAnimationFrame(fadeFlash);
@@ -560,14 +651,41 @@ export class ZombieDog {
   /**
    * Dispose and cleanup
    */
+  /**
+   * Dispose and cleanup
+   */
   dispose() {
     this.isDisposed = true;
     if (this.mesh) {
-      this.mesh.traverse((child) => {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) child.material.dispose();
-      });
       this.scene.remove(this.mesh);
+
+      // Safe dispose dealing with Shared Assets vs Cloned Materials
+      const assets = ZombieDog.assets;
+
+      this.mesh.traverse((child) => {
+        // Did NOT dispose geometry (Shared)
+
+        if (child.isMesh && child.material) {
+          let isShared = false;
+          if (assets) {
+            if (
+              child.material === assets.bodyMat ||
+              child.material === assets.bloodMat ||
+              child.material === assets.eyeMat ||
+              child.material === assets.ribMat
+            ) {
+              isShared = true;
+            }
+            if (assets.glowMat && child.material === assets.glowMat)
+              isShared = true;
+          }
+
+          // Only dispose unique materials (Horde clones)
+          if (!isShared) {
+            child.material.dispose();
+          }
+        }
+      });
       this.mesh = null;
     }
   }

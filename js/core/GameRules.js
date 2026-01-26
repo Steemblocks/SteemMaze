@@ -144,13 +144,14 @@ export const GameRules = {
    * Scales in 5-LEVEL TIERS (FEWER THAN DOGS)
    */
   getZombieCount(level) {
-    // Tier calculation: 0 for 1-5, 1 for 6-10, etc.
-    const tier = Math.floor((level - 1) / 5);
+    // START: 4 zombies (was 2) - Ensure early game has SOME threat
+    if (level <= 3) return 3 + level; // L1=4, L2=5, L3=6
 
-    // Lower count for zombies (slower enemies)
-    // L1: 2, L6: 5, L11: 8...
-    const count = 2 + tier * 3 + Math.floor(Math.pow(1.1, tier));
-    return Math.min(count, 40);
+    // Mid Game: 6 to 15
+    const tier = Math.floor((level - 4) / 4);
+    const count = 6 + tier * 3;
+
+    return Math.min(count, 35); // Cap at 35 (was 40)
   },
 
   /**
@@ -158,14 +159,17 @@ export const GameRules = {
    * Dogs appear from level 2 (MORE NUMEROUS THAN ZOMBIES)
    */
   getZombieDogCount(level) {
-    if (level < 2) return 0;
+    if (level < 3) return 0; // Starts Level 3 (was 2)
 
-    const tier = Math.floor((level - 1) / 5);
-    // Higher count for dogs (fast enemies)
-    // L1-5: ~4, L6-10: ~10, L11-15: ~16...
-    // Base 4, +6 per tier
-    const count = 4 + tier * 6 + Math.floor(Math.pow(1.2, tier));
-    return Math.min(count, 60);
+    // Gradual introduction
+    // L3: 2, L4: 3, L5: 4...
+    if (level <= 5) return level - 1;
+
+    // Scaling
+    const tier = Math.floor((level - 6) / 5);
+    const count = 5 + tier * 4;
+
+    return Math.min(count, 30); // Cap at 30 (was 60 - way too many!)
   },
 
   /**
@@ -659,9 +663,9 @@ export const GameRules = {
 
     return {
       enabled: true,
-      probability: Math.min(0.05 + level * 0.01, 0.2), // 5-20% per move
+      probability: Math.min(0.08 + level * 0.015, 0.25), // 8-25% per move (more frequent)
       events: {
-        darkness: { weight: 3, duration: 300 },
+        darkness: { weight: 6, duration: 300 }, // Double weight for Darkness (Main feature)
         zombieSurge: { weight: 2, duration: 180 },
         bonusTime: { weight: 4, duration: 0 },
         coinRain: { weight: 2, duration: 0 },

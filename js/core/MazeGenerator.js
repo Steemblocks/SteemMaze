@@ -18,7 +18,7 @@ export class MazeGenerator {
         bottom: true,
         left: true,
         visited: false,
-      }))
+      })),
     );
 
     const stack = [];
@@ -135,20 +135,20 @@ export class MazeGenerator {
 
       const cell = maze[z][x];
 
-      // Check all four directions
-      if (cell.top && z > 0 && !visited[z - 1][x]) {
+      // Check all four directions - traverse if NO wall (!)
+      if (!cell.top && z > 0 && !visited[z - 1][x]) {
         visited[z - 1][x] = true;
         queue.push([x, z - 1]);
       }
-      if (cell.right && x < size - 1 && !visited[z][x + 1]) {
+      if (!cell.right && x < size - 1 && !visited[z][x + 1]) {
         visited[z][x + 1] = true;
         queue.push([x + 1, z]);
       }
-      if (cell.bottom && z < size - 1 && !visited[z + 1][x]) {
+      if (!cell.bottom && z < size - 1 && !visited[z + 1][x]) {
         visited[z + 1][x] = true;
         queue.push([x, z + 1]);
       }
-      if (cell.left && x > 0 && !visited[z][x - 1]) {
+      if (!cell.left && x > 0 && !visited[z][x - 1]) {
         visited[z][x - 1] = true;
         queue.push([x - 1, z]);
       }

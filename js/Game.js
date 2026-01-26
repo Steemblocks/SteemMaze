@@ -11,6 +11,7 @@ import { Zombie } from "./entities/Zombie.js";
 import { ZombieDog } from "./entities/ZombieDog.js";
 import { BossZombie } from "./entities/BossZombie.js";
 import { BigfootBoss } from "./entities/BigfootBoss.js";
+import { Monster } from "./entities/Monster.js";
 import { Player } from "./entities/Player.js";
 import {
   PostProcessingManager,
@@ -126,6 +127,7 @@ export class Game {
 
     // Horde system (spawns after level 5 during darkness)
     this.bossZombies = []; // Boss zombies in current level
+    this.monsters = []; // Special Monsters
     this.hordeZombies = []; // Horde-spawned regular zombies
     this.hordeDogs = []; // Horde-spawned dogs
     this.darknessStartTime = null; // When darkness started
@@ -146,6 +148,7 @@ export class Game {
     this.comboMeter = null;
     this.weatherManager = null; // Rain and thunder effects for level 7+
     this.lastPlayerPos = { x: 0, z: 0 }; // For particle trails
+    this.spawnQueue = []; // Queue for staggered entity spawning
 
     this.initBackground();
     this.init();
@@ -1176,7 +1179,14 @@ export class Game {
   }
 
   createCoins() {
-    this.coins.forEach((c) => this.scene.remove(c));
+    // Clean up old instances
+    if (this.coinsMesh) {
+      this.scene.remove(this.coinsMesh);
+      if (this.coinsMesh.geometry) this.coinsMesh.geometry.dispose();
+      if (this.coinsMesh.material) this.coinsMesh.material.dispose();
+      this.coinsMesh = null;
+    }
+    // We don't have individual meshes to remove anymore, just reset data
     this.coins = [];
 
     const count = Math.floor(this.MAZE_SIZE * 0.8) + this.level; // Scale with size
@@ -1192,23 +1202,41 @@ export class Game {
     });
     const geo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 16);
 
+    // Create InstancedMesh
+    this.coinsMesh = new THREE.InstancedMesh(geo, mat, count);
+    this.coinsMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); // valid for coins if we animate/hide them
+    this.coinsMesh.castShadow = true;
+    this.coinsMesh.receiveShadow = true;
+    this.scene.add(this.coinsMesh);
+
+    const dummy = new THREE.Object3D();
+
     for (let i = 0; i < count; i++) {
       const x = Math.floor(Math.random() * this.MAZE_SIZE);
       const z = Math.floor(Math.random() * this.MAZE_SIZE);
-      // Collision check skipped for brevity (coins can overlap items)
 
-      const coin = new THREE.Mesh(geo, mat);
-      coin.rotation.z = Math.PI / 2; // Stand vertically
-      coin.position.set(
-        offset + x * this.CELL_SIZE + this.CELL_SIZE / 2,
-        1.0,
-        offset + z * this.CELL_SIZE + this.CELL_SIZE / 2,
-      );
-      coin.userData = { gridX: x, gridZ: z };
+      const posX = offset + x * this.CELL_SIZE + this.CELL_SIZE / 2;
+      const posZ = offset + z * this.CELL_SIZE + this.CELL_SIZE / 2;
+      const posY = 1.0;
 
-      this.scene.add(coin);
-      this.coins.push(coin);
+      dummy.position.set(posX, posY, posZ);
+      dummy.rotation.z = Math.PI / 2; // Stand vertically
+      dummy.updateMatrix();
+
+      this.coinsMesh.setMatrixAt(i, dummy.matrix);
+
+      // Store data for logic
+      this.coins.push({
+        index: i,
+        gridX: x,
+        gridZ: z,
+        position: new THREE.Vector3(posX, posY, posZ),
+        collecting: false,
+        active: true,
+      });
     }
+
+    this.coinsMesh.instanceMatrix.needsUpdate = true;
   }
 
   createZombies() {
@@ -1270,10 +1298,20 @@ export class Game {
       }
 
       const bossLabel = actualCount > 1 ? "BOSSES" : "BOSS";
-      this.ui.showToast(
-        `⚠️ ${actualCount} BIGFOOT ${bossLabel} DETECTED!`,
-        "warning",
-      );
+
+      // Debounce toast to prevent double notifications on level load
+      const now = Date.now();
+      if (!this.lastBigfootToast || now - this.lastBigfootToast > 2000) {
+        if (this.audioManager) {
+          this.audioManager.playBossSpawn();
+        }
+
+        this.ui.showToast(
+          `⚠️ ${actualCount} BIGFOOT ${bossLabel} DETECTED!`,
+          "warning",
+        );
+        this.lastBigfootToast = now;
+      }
     }
 
     for (let i = 0; i < zombieCount; i++) {
@@ -1304,6 +1342,56 @@ export class Game {
 
     // Also create zombie dogs starting from level 2
     this.createZombieDogs();
+
+    // Create Monsters (Special Enemy)
+    this.createMonsters();
+  }
+
+  createMonsters() {
+    // Clear existing monsters
+    this.monsters.forEach((m) => m.dispose());
+    this.monsters = [];
+
+    // Spawn 1 Monster per level, max 5 (Very dangerous)
+    const count = Math.min(Math.floor(this.level / 2) + 1, 5);
+
+    const usedPositions = new Set();
+
+    for (let i = 0; i < count; i++) {
+      let x, z;
+      let attempts = 0;
+      let valid = false;
+
+      while (!valid && attempts < 50) {
+        x = Math.floor(Math.random() * this.MAZE_SIZE);
+        z = Math.floor(Math.random() * this.MAZE_SIZE);
+
+        // Check distance from player start (bottom right)
+        const dist =
+          Math.abs(x - (this.MAZE_SIZE - 1)) +
+          Math.abs(z - (this.MAZE_SIZE - 1));
+
+        if (dist > 5 && !usedPositions.has(`${x},${z}`)) {
+          valid = true;
+          usedPositions.add(`${x},${z}`);
+        }
+        attempts++;
+      }
+
+      if (valid) {
+        const monster = new Monster(
+          x,
+          z,
+          this.maze,
+          this.CELL_SIZE,
+          this.MAZE_SIZE,
+          this.scene,
+          this.level,
+          this, // Pass game instance
+        );
+        this.monsters.push(monster);
+      }
+    }
   }
 
   createZombieDogs() {
@@ -1701,11 +1789,9 @@ export class Game {
 
     switch (event) {
       case "darkness":
-        // Double check: ensure we don't trigger darkness too early
-        if (this.time < minTimeForDarkness) {
-          return;
-        }
-        this.triggerDarknessEvent();
+        // Darkness is now handled by a dedicated timer (every 3 minutes)
+        // We skip it here to keep it periodic and predictable as requested
+        return;
         break;
       case "zombie_surge":
         this.triggerZombieSurge();
@@ -1731,10 +1817,14 @@ export class Game {
       "visibility_off",
     );
 
-    // Track darkness state
     this.isDarknessActive = true;
     this.darknessStartTime = Date.now();
     this.hordeSpawned = false;
+
+    // AUDIO: Play terrifying scream
+    if (this.audioManager) {
+      this.audioManager.playHordeScream();
+    }
 
     // Store default fog for restoration
     if (!this.defaultFogDensity) {
@@ -1770,24 +1860,8 @@ export class Game {
     if (this.level >= 5) {
       this.hordeCheckTimeout = setTimeout(() => {
         // Check if player has activated protection
-        console.log("[Horde Debug] Checking Spawn Conditions:", {
-          active: this.isDarknessActive,
-          spawned: this.hordeSpawned,
-          light: this.isLightBoostActive,
-          potion: this.isPotionActive,
-        });
-
         if (this.isDarknessActive && !this.hordeSpawned) {
-          console.log("[Horde Debug] Conditions met! Spawning Horde...");
           this.spawnZombieHorde();
-        } else {
-          console.log(
-            "[Horde Debug] Horde spawn blocked by state (Active: " +
-              this.isDarknessActive +
-              ", Spawned: " +
-              this.hordeSpawned +
-              ")",
-          );
         }
       }, 1000); // 1 second delay (reduced from 2s)
     }
@@ -1805,7 +1879,9 @@ export class Game {
     this.isDarknessActive = false;
     this.darknessStartTime = null;
 
-    // Clear horde check timeout
+    // Ambient Sound Timer
+    this.lastAmbientSoundTime = 0;
+
     if (this.hordeCheckTimeout) {
       clearTimeout(this.hordeCheckTimeout);
       this.hordeCheckTimeout = null;
@@ -1854,97 +1930,43 @@ export class Game {
     const totalNeeded =
       hordeConfig.bossCount + hordeConfig.zombieCount + hordeConfig.dogCount;
     const spawnPositions = this.findHordeSpawnPositions(totalNeeded);
-    console.log(
-      `[Horde Debug] Found ${spawnPositions.length} spawn positions for ${totalNeeded} entities (Boss: ${hordeConfig.bossCount}, Zombie: ${hordeConfig.zombieCount}, Dog: ${hordeConfig.dogCount})`,
-    );
 
     if (spawnPositions.length < 1) {
       console.warn("Could not find spawn positions for horde");
       return;
     }
 
-    // Spawn Bosses (Scale count with level)
-    // Level 1-19: 1 Boss
-    // Level 20-39: 2 Bosses
-    // Level 40+: 3 Bosses
-    const bossCount = this.level < 20 ? 1 : this.level < 40 ? 2 : 3;
+    // Spawn Bosses - Add to Queue
+    const bossCount = hordeConfig.bossCount;
 
     for (let i = 0; i < bossCount && i < spawnPositions.length; i++) {
       const bossPos = spawnPositions[i];
-      const boss = new BossZombie(
-        bossPos.x,
-        bossPos.z,
-        this.maze,
-        this.CELL_SIZE,
-        this.MAZE_SIZE,
-        this.scene,
-        this.level,
-      );
-
-      // Mark as horde boss (not persistent)
-      boss.isHordeBoss = true;
-      boss.isPersistent = false;
-
-      // VISUAL DISTINCTION: Make horde bosses glow more intensely
-      if (boss.mesh) {
-        boss.mesh.userData.isHordeBoss = true;
-        // Traverse and enhance emissive for all materials
-        boss.mesh.traverse((child) => {
-          if (child.material && child.material.emissive) {
-            child.material.emissiveIntensity = 0.6; // Brighter glow
-          }
-        });
-      }
-
-      // Enhanced eye glow for horde boss
-      if (boss.eyeGlow) {
-        boss.eyeGlow.intensity = 2.0; // Brighter eyes
-        boss.eyeGlow.distance = 8; // Larger glow radius
-      }
-
-      this.scene.add(boss.mesh);
-      this.bossZombies.push(boss);
+      this.spawnQueue.push({
+        type: "boss",
+        x: bossPos.x,
+        z: bossPos.z,
+      });
     }
 
     // Adjust start index for next loop
     const startIndex = bossCount;
 
-    // Spawn horde zombies (scaled with level)
+    // Spawn horde zombies - Add to Queue
     for (
       let i = startIndex;
       i < Math.min(startIndex + hordeConfig.zombieCount, spawnPositions.length);
       i++
     ) {
       const pos = spawnPositions[i];
-      const zombie = new Zombie(
-        pos.x,
-        pos.z,
-        this.maze,
-        this.CELL_SIZE,
-        this.MAZE_SIZE,
-        this.scene,
-        i % 4, // Corner
-        this.level,
-      );
-      // Extended chase range for horde zombies
-      zombie.chaseRange = this.MAZE_SIZE;
-      zombie.isHordeZombie = true;
-      zombie.moveInterval = Math.max(10, Math.floor(zombie.moveInterval * 0.7)); // 30% Faster
-
-      // VISUAL DISTINCTION: Give horde zombies a red emissive glow
-      if (zombie.bodyMaterial) {
-        zombie.bodyMaterial.emissive.setHex(0x660000); // Dark red glow
-        zombie.bodyMaterial.emissiveIntensity = 0.4;
-      }
-      // Mark mesh for identification
-      if (zombie.mesh) {
-        zombie.mesh.userData.isHordeZombie = true;
-      }
-
-      this.hordeZombies.push(zombie);
+      this.spawnQueue.push({
+        type: "zombie",
+        x: pos.x,
+        z: pos.z,
+        corner: i % 4,
+      });
     }
 
-    // Spawn horde dogs (scaled with level)
+    // Spawn horde dogs - Add to Queue
     for (
       let i = startIndex + hordeConfig.zombieCount;
       i <
@@ -1955,31 +1977,123 @@ export class Game {
       i++
     ) {
       const pos = spawnPositions[i];
-      const dog = new ZombieDog(
-        pos.x,
-        pos.z,
+      this.spawnQueue.push({
+        type: "dog",
+        x: pos.x,
+        z: pos.z,
+      });
+    }
+  }
+
+  /**
+   * Process the spawn queue - 1 entity per frame to prevent lag spikes
+   */
+  processSpawnQueue() {
+    if (!this.spawnQueue || this.spawnQueue.length === 0) return;
+
+    // Process up to 2 entities per frame
+    const batchSize = 2;
+    for (let i = 0; i < batchSize && this.spawnQueue.length > 0; i++) {
+      const task = this.spawnQueue.shift();
+      this.spawnEntity(task);
+    }
+  }
+
+  spawnEntity(task) {
+    if (task.type === "boss") {
+      const boss = new BossZombie(
+        task.x,
+        task.z,
         this.maze,
         this.CELL_SIZE,
         this.MAZE_SIZE,
         this.scene,
         this.level,
       );
-      // Extended chase range for horde dogs
-      dog.chaseRange = this.MAZE_SIZE;
-      dog.isHordeDog = true;
-      dog.moveInterval = Math.max(8, Math.floor(dog.moveInterval * 0.8)); // 20% Faster
+      boss.isHordeBoss = true;
+      boss.isPersistent = false;
+      if (boss.mesh) {
+        boss.mesh.userData.isHordeBoss = true;
+        // Traverse and clone material before modifying to avoid affecting shared cache
+        boss.mesh.traverse((child) => {
+          if (child.isMesh && child.material && child.material.emissive) {
+            const hordeMat = child.material.clone();
+            hordeMat.emissiveIntensity = 0.6; // Brighter glow
+            child.material = hordeMat;
+          }
+        });
+      }
+      if (boss.eyeGlow) {
+        boss.eyeGlow.intensity = 2.0;
+        boss.eyeGlow.distance = 8;
+      }
+      this.scene.add(boss.mesh);
+      this.bossZombies.push(boss);
 
-      // VISUAL DISTINCTION: Give horde dogs a red tint
-      if (dog.mesh) {
-        dog.mesh.userData.isHordeDog = true;
-        dog.mesh.traverse((child) => {
-          if (child.material && child.material.emissive) {
-            child.material.emissive.setHex(0x440000);
-            child.material.emissiveIntensity = 0.3;
+      // Play Spawn Sound for Horde Boss
+      if (this.audioManager) {
+        this.audioManager.playBossSpawn();
+      }
+    } else if (task.type === "zombie") {
+      const zombie = new Zombie(
+        task.x,
+        task.z,
+        this.maze,
+        this.CELL_SIZE,
+        this.MAZE_SIZE,
+        this.scene,
+        task.corner,
+        this.level,
+      );
+      zombie.chaseRange = this.MAZE_SIZE;
+      zombie.isHordeZombie = true;
+      zombie.moveInterval = Math.max(10, Math.floor(zombie.moveInterval * 0.7));
+
+      // VISUAL DISTINCTION: Clone and modify material
+      if (zombie.mesh) {
+        zombie.mesh.userData.isHordeZombie = true;
+        zombie.mesh.traverse((child) => {
+          // Target specific parts that use the body material
+          if (child.isMesh && child.name !== "jaw" && child.name !== "neck") {
+            if (child.material && child.material.emissive) {
+              // Clone material so we don't change ALL zombies
+              const hordeMat = child.material.clone();
+              hordeMat.emissive.setHex(0x660000); // Dark red glow
+              hordeMat.emissiveIntensity = 0.4;
+              child.material = hordeMat;
+            }
           }
         });
       }
 
+      this.hordeZombies.push(zombie);
+    } else if (task.type === "dog") {
+      const dog = new ZombieDog(
+        task.x,
+        task.z,
+        this.maze,
+        this.CELL_SIZE,
+        this.MAZE_SIZE,
+        this.scene,
+        this.level,
+      );
+      dog.chaseRange = this.MAZE_SIZE;
+      dog.isHordeDog = true;
+      dog.moveInterval = Math.max(8, Math.floor(dog.moveInterval * 0.8));
+
+      // VISUAL DISTINCTION: Clone and modify material
+      if (dog.mesh) {
+        dog.mesh.userData.isHordeDog = true;
+        dog.mesh.traverse((child) => {
+          if (child.isMesh && child.material && child.material.emissive) {
+            // Clone material so we don't change ALL dogs
+            const hordeMat = child.material.clone();
+            hordeMat.emissive.setHex(0x440000); // Red tint
+            hordeMat.emissiveIntensity = 0.3;
+            child.material = hordeMat;
+          }
+        });
+      }
       this.hordeDogs.push(dog);
     }
   }
@@ -2130,7 +2244,7 @@ export class Game {
 
   createPlayer() {
     // Use the Player entity class for humanoid model with animations
-    this.player = new Player(this.scene, this.CELL_SIZE);
+    this.player = new Player(this.scene, this.CELL_SIZE, this.audioManager);
     this.playerMesh = this.player.mesh; // Keep reference for compatibility
     this.player.addToScene();
     this.updatePlayerPosition();
@@ -2408,24 +2522,52 @@ export class Game {
 
     // Magnet range - attracts coins from nearby cells
     const magnetRange = this.isMagnetActive ? 2 : 0;
+    const dummy = new THREE.Object3D();
 
     for (let i = this.coins.length - 1; i >= 0; i--) {
-      const coin = this.coins[i];
-      if (!coin.userData || coin.userData.collecting) continue; // Skip if already being collected
+      const coinData = this.coins[i];
+      if (!coinData.active || coinData.collecting) continue;
 
-      const coinX = coin.userData.gridX;
-      const coinZ = coin.userData.gridZ;
+      const coinX = coinData.gridX;
+      const coinZ = coinData.gridZ;
 
       // Check if within collection/magnet range
       const distance = Math.abs(coinX - x) + Math.abs(coinZ - z);
 
       if (distance <= magnetRange || (coinX === x && coinZ === z)) {
-        // Mark as being collected
-        coin.userData.collecting = true;
+        // Mark as being collected and inactive in the batch
+        coinData.collecting = true;
+        coinData.active = false;
+
+        // Hide the instance immediately by scaling to 0
+        dummy.position.copy(coinData.position);
+        dummy.rotation.z = Math.PI / 2;
+        dummy.scale.set(0, 0, 0); // Hide
+        dummy.updateMatrix();
+
+        if (this.coinsMesh) {
+          this.coinsMesh.setMatrixAt(coinData.index, dummy.matrix);
+          this.coinsMesh.instanceMatrix.needsUpdate = true;
+        }
+
+        // SPAWN TEMPORARY VISUAL COIN for the collection animation
+        // This keeps performance high (batching 99% of coins) while allowing rich interaction for the 1 collected coin.
+        const tempGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 16);
+        const tempMat = new THREE.MeshStandardMaterial({
+          color: 0xffd700,
+          metalness: 0.8,
+          roughness: 0.2,
+          emissive: 0xaa6600,
+          emissiveIntensity: 0.2,
+        });
+        const visualCoin = new THREE.Mesh(tempGeo, tempMat);
+        visualCoin.position.copy(coinData.position);
+        visualCoin.rotation.z = Math.PI / 2;
+        this.scene.add(visualCoin);
 
         // Visual Feedback: Floating Text
         this.showFloatingText(
-          coin.position,
+          coinData.position,
           `+${GameRules.COIN_VALUE}`,
           "#ffd700",
         );
@@ -2442,7 +2584,7 @@ export class Game {
 
         // Particle effect
         if (this.particleTrail) {
-          this.particleTrail.burst(coin.position, 5, 0xffd700);
+          this.particleTrail.burst(coinData.position, 5, 0xffd700);
         }
 
         // AUDIO: Play coin sound
@@ -2453,9 +2595,9 @@ export class Game {
           navigator.vibrate(GameRules.VIBRATION_COLLECT);
         }
 
-        // Smooth collection animation
-        const startY = coin.position.y;
-        const startScale = coin.scale.x;
+        // Smooth collection animation on the VISUAL coin
+        const startY = visualCoin.position.y;
+        const startScale = visualCoin.scale.x;
         const startTime = Date.now();
         const duration = 200; // 200ms animation
 
@@ -2465,17 +2607,23 @@ export class Game {
           const eased = 1 - Math.pow(1 - progress, 2);
 
           // Fly up and shrink
-          coin.position.y = startY + eased * 1.5;
-          coin.scale.setScalar(startScale * (1 - eased));
-          coin.rotation.x += 0.2; // Fast spin
+          visualCoin.position.y = startY + eased * 1.5;
+          visualCoin.scale.setScalar(startScale * (1 - eased));
+          visualCoin.rotation.x += 0.2; // Fast spin
 
           if (progress < 1) {
             requestAnimationFrame(animateCoin);
           } else {
             // Remove after animation
-            if (coin.parent) this.scene.remove(coin);
-            const idx = this.coins.indexOf(coin);
-            if (idx > -1) this.coins.splice(idx, 1);
+            this.scene.remove(visualCoin);
+            visualCoin.geometry.dispose();
+            visualCoin.material.dispose();
+            // Data cleanup is not strictly necessary for array efficiency if we just use flags,
+            // but we can remove it to keep array small if levels are very long?
+            // Actually keeping it is safer for index alignment unless we compact.
+            // But we used index in setMatrixAt. So we CANNOT remove from array without re-indexing or
+            // using the 'index' property carefully.
+            // Let's just keep it in array but flagged inactive.
           }
         };
 
@@ -2705,6 +2853,9 @@ export class Game {
     // Removed guard clause to ensure persistent bosses are interactable
     // if (!this.isDarknessActive || !this.hordeSpawned) return;
 
+    // Check monster collisions
+    this.checkMonsterCollision();
+
     // Check boss zombie collisions
     for (let i = this.bossZombies.length - 1; i >= 0; i--) {
       const boss = this.bossZombies[i];
@@ -2798,6 +2949,9 @@ export class Game {
           dog.dispose();
           this.hordeDogs.splice(i, 1);
 
+          // AUDIO: Explosion sound
+          if (this.audioManager) this.audioManager.playExplosion();
+
           // Lower reward for horde dogs (5 coins)
           this.totalCoins += this.HORDE_DOG_REWARD;
           this.gameData.set("totalCoins", this.totalCoins);
@@ -2814,6 +2968,38 @@ export class Game {
 
           this.cameraShake = 0.2;
           if (navigator.vibrate) navigator.vibrate(30);
+        } else {
+          this.onZombieHit();
+          return;
+        }
+      }
+    }
+  }
+
+  checkMonsterCollision() {
+    for (let i = this.monsters.length - 1; i >= 0; i--) {
+      const monster = this.monsters[i];
+      if (monster.checkCollision(this.playerPos.x, this.playerPos.z)) {
+        if (this.isPotionActive) {
+          monster.explode();
+          // No need to splice if explode/dispose handles safety, but consistency:
+          this.monsters.splice(i, 1);
+
+          if (this.audioManager) this.audioManager.playExplosion();
+
+          this.totalCoins += 50; // Use static reward or rule
+          this.zombiesKilled++;
+
+          this.ui.showToast(
+            "Monster Banished! +50 Coins",
+            "face_retouching_off",
+          );
+
+          const coinEl = document.getElementById("coinsDisplay");
+          if (coinEl) coinEl.textContent = this.totalCoins;
+
+          this.cameraShake = 0.5;
+          if (navigator.vibrate) navigator.vibrate(40);
         } else {
           this.onZombieHit();
           return;
@@ -2862,13 +3048,32 @@ export class Game {
   }
 
   updateCoins() {
-    // Slow, gentle coin spin
+    if (!this.coins || !this.coinsMesh) return;
+
+    const dummy = new THREE.Object3D();
+    const time = Date.now() * 0.002;
+
     this.coins.forEach((c) => {
-      c.rotation.x += 0.01; // Slow spin
-      // Add gentle bobbing
-      c.position.y =
-        1.0 + Math.sin(Date.now() * 0.002 + c.userData.gridX) * 0.1;
+      // If inactive (collected), we skip updating it (it's hidden)
+      if (!c.active) return;
+
+      // Calculate simple spin and bob
+      // Rotation: Stand vertically (Z=90) and spin on X axis (time)
+      const spinAngle = time + c.gridX * 0.5; // Use gridX as phase offset
+      dummy.rotation.set(spinAngle, 0, Math.PI / 2);
+
+      // Bobbing position
+      const yOffset = Math.sin(time + c.gridX) * 0.1;
+
+      // Use stored base position
+      dummy.position.copy(c.position);
+      dummy.position.y += yOffset;
+
+      dummy.updateMatrix();
+      this.coinsMesh.setMatrixAt(c.index, dummy.matrix);
     });
+
+    this.coinsMesh.instanceMatrix.needsUpdate = true;
   }
 
   /**
@@ -2922,6 +3127,8 @@ export class Game {
 
     // Check invincibility frames - prevents rapid consecutive hits
     if (this.invincibilityFrames > 0) {
+      // AUDIO: collision feedback even if invincible
+      if (this.audioManager) this.audioManager.playToggle();
       return; // Still invincible, ignore hit
     }
 
@@ -2944,6 +3151,10 @@ export class Game {
       }
 
       this.ui.showToast("Shield absorbed the hit!", "shield");
+
+      // AUDIO: Play shield sound
+      if (this.audioManager) this.audioManager.playShield();
+
       this.cameraShake = 0.5;
 
       if (this.gameData.getSetting("vibration") && navigator.vibrate) {
@@ -3039,6 +3250,7 @@ export class Game {
     if (this.zombieDogs) this.zombieDogs.forEach(pushAway);
     if (this.hordeZombies) this.hordeZombies.forEach(pushAway);
     if (this.hordeDogs) this.hordeDogs.forEach(pushAway);
+    if (this.monsters) this.monsters.forEach(pushAway);
     if (this.bossZombies) this.bossZombies.forEach(pushAway);
   }
 
@@ -3400,9 +3612,7 @@ export class Game {
 
     // Update coins display
     const coinsDisplay = document.getElementById("coinsDisplay");
-    if (coinsDisplay) {
-      coinsDisplay.textContent = this.totalCoins;
-    }
+    coinsDisplay.textContent = this.totalCoins;
   }
 
   restartLevel() {
@@ -3500,6 +3710,29 @@ export class Game {
       this.particleTrail.setColor(0x4ade80);
     }
 
+    // --- DETERMINISTIC EVENTS ---
+    // First horde at 1 minute, then every 3 minutes
+    if (this.level >= 5) {
+      if (this.darknessEventTimer) {
+        clearTimeout(this.darknessEventTimer);
+        clearInterval(this.darknessEventTimer);
+      }
+
+      // Use a timeout for the first event (1 minute)
+      this.darknessEventTimer = setTimeout(() => {
+        if (!this.isPaused && this.isRunning && !this.won) {
+          this.triggerDarknessEvent();
+        }
+
+        // Then switch to interval (3 minutes)
+        this.darknessEventTimer = setInterval(() => {
+          if (!this.isPaused && this.isRunning && !this.won) {
+            this.triggerDarknessEvent();
+          }
+        }, 180000); // 3 Minutes recurring
+      }, 60000); // 1 Minute initial delay
+    }
+
     // Weather effects - activate storm at level 7+
     if (this.weatherManager) {
       if (WeatherManager.shouldActivateStorm(this.level)) {
@@ -3545,6 +3778,12 @@ export class Game {
       this.timerInterval = null;
     }
 
+    if (this.darknessEventTimer) {
+      clearTimeout(this.darknessEventTimer);
+      clearInterval(this.darknessEventTimer);
+      this.darknessEventTimer = null;
+    }
+
     // 2. Clear Event Timers
     if (this.comboDecayTimer) {
       clearTimeout(this.comboDecayTimer);
@@ -3580,6 +3819,9 @@ export class Game {
       clearInterval(this.fogUpdateInterval);
       this.fogUpdateInterval = null;
     }
+
+    // Clear Spawn Queue
+    this.spawnQueue = [];
 
     // 3. Reset Game State/Effects
     this.isDarknessActive = false;
@@ -3769,6 +4011,9 @@ export class Game {
       // Bob entire goal slightly
       this.goal.position.y = 1.5 + Math.sin(Date.now() * 0.002) * 0.1;
 
+      // === AMBIENT SOUNDS ===
+      this.updateAmbientSounds();
+
       // Animate parts
       if (this.portalParts) {
         this.portalParts.forEach((part) => {
@@ -3807,6 +4052,9 @@ export class Game {
       gem.position.y =
         1 + animationCache.getWave(0.5, 0.15, gem.userData.gridX);
     });
+
+    // === SPAWN QUEUE PROCESSING (Staggered Spawning) ===
+    this.processSpawnQueue();
 
     // === GAME LOGIC UPDATES ===
     // Decrement invincibility frames
@@ -3869,6 +4117,16 @@ export class Game {
         boss.update(smoothDelta);
       });
 
+      // === MONSTERS ===
+      this.monsters.forEach((monster) => {
+        monster.setPlayerPosition(
+          this.playerPos.x,
+          this.playerPos.z,
+          this.isLightBoostActive,
+        );
+        monster.update(smoothDelta);
+      });
+
       // === HORDE ENTITIES (active if spawned, darkness or not) ===
       if (this.hordeSpawned) {
         // Boss zombies already updated above
@@ -3898,6 +4156,7 @@ export class Game {
     // Collision checks
     this.checkZombieCollision();
     this.checkZombieDogCollision();
+    this.checkMonsterCollision();
     this.checkHordeCollisions();
 
     // === ENVIRONMENTAL EFFECTS (optimized with animation cache) ===
@@ -3935,6 +4194,125 @@ export class Game {
       this.postProcessing.render();
     } else {
       this.renderer.render(this.scene, this.camera);
+    }
+  }
+
+  updateAmbientSounds() {
+    // Only play if game is active and not paused
+    if (this.isPaused || this.won || this.ui.currentScreen !== "gameScreen")
+      return;
+
+    const now = Date.now();
+    // Min interval for ANY ambient sound check: 2 seconds
+    if (now - this.lastAmbientSoundTime < 2000) return;
+
+    if (this.audioManager) {
+      // Helper: Linear falloff (1.0 at dist 0, 0.0 at maxDist)
+      const getVol = (dist, maxDist) => Math.max(0, 1 - dist / maxDist);
+
+      // 1. Zombies (Hearing range: 8)
+      let minZombieDist = Infinity;
+      const checkZ = (list) => {
+        if (!list) return;
+        for (const z of list) {
+          const dist =
+            Math.abs(z.gridX - this.playerPos.x) +
+            Math.abs(z.gridZ - this.playerPos.z);
+          if (dist < minZombieDist) minZombieDist = dist;
+        }
+      };
+      checkZ(this.zombies);
+      checkZ(this.hordeZombies);
+
+      if (minZombieDist < 2) {
+        if (Math.random() < 0.1) {
+          this.audioManager.playZombieGrowl(getVol(minZombieDist, 2));
+          this.lastAmbientSoundTime = now;
+          return;
+        }
+      }
+
+      // 1.2 Boss Check (Bigfoot & Horde Angel)
+      let minBigfootDist = Infinity;
+      let minHordeBossDist = Infinity;
+
+      for (const boss of this.bossZombies) {
+        const d =
+          Math.abs(boss.gridX - this.playerPos.x) +
+          Math.abs(boss.gridZ - this.playerPos.z);
+        if (boss instanceof BigfootBoss) {
+          if (d < minBigfootDist) minBigfootDist = d;
+        } else {
+          if (d < minHordeBossDist) minHordeBossDist = d;
+        }
+      }
+
+      if (minBigfootDist < 3) {
+        if (Math.random() < 0.12) {
+          this.audioManager.playBigfootRoar(getVol(minBigfootDist, 3));
+          this.lastAmbientSoundTime = now;
+          return;
+        }
+      } else if (minHordeBossDist < 3) {
+        if (Math.random() < 0.1) {
+          // Use Monster Growl for Angel Bosses (distinct from Bigfoot)
+          this.audioManager.playMonsterGrowl(getVol(minHordeBossDist, 3));
+          this.lastAmbientSoundTime = now;
+          return;
+        }
+      }
+
+      // 1.5 Monster Check (Specific for the new Monster entity)
+      let minMonsterDist = Infinity;
+      if (this.monsters) {
+        for (const m of this.monsters) {
+          const d =
+            Math.abs(m.gridX - this.playerPos.x) +
+            Math.abs(m.gridZ - this.playerPos.z);
+          if (d < minMonsterDist) minMonsterDist = d;
+        }
+      }
+
+      if (minMonsterDist < 4) {
+        if (Math.random() < 0.08) {
+          // Higher chance for monster growl
+          this.audioManager.playMonsterGrowl(getVol(minMonsterDist, 4));
+          this.lastAmbientSoundTime = now;
+          return;
+        }
+      }
+
+      // 1.8 Dog Check (Horde or Normal)
+      let minDogDist = Infinity;
+      const checkDogs = (list) => {
+        if (!list) return;
+        for (const d of list) {
+          const dist =
+            Math.abs(d.gridX - this.playerPos.x) +
+            Math.abs(d.gridZ - this.playerPos.z);
+          if (dist < minDogDist) minDogDist = dist;
+        }
+      };
+      checkDogs(this.zombieDogs);
+      checkDogs(this.hordeDogs);
+
+      if (minDogDist < 2) {
+        // High chance for bark (fast aggressive enemy)
+        if (Math.random() < 0.15) {
+          this.audioManager.playDogBark(getVol(minDogDist, 2));
+          this.lastAmbientSoundTime = now;
+          return;
+        }
+      }
+
+      // 2. Distant Ambient (Low Priority)
+      // Only if no growl played recently
+      if (now - this.lastAmbientSoundTime > 12000) {
+        if (Math.random() < 0.01) {
+          this.audioManager.playZombieAmbient();
+          this.lastAmbientSoundTime = now;
+        }
+      }
     }
   }
 
