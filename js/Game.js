@@ -2325,6 +2325,11 @@ export class Game {
     this.playerPos.z = newZ;
     this.updatePlayerPosition(dx, dz);
 
+    // Update camera direction for look-ahead
+    if (this.cameraController) {
+      this.cameraController.setPlayerDirection(dx, dz);
+    }
+
     // Emit particle trail
     if (this.particleTrail && this.playerMesh) {
       this.particleTrail.emit(this.playerMesh.position, 2);
@@ -3314,7 +3319,7 @@ export class Game {
 
   startTimer() {
     this.timerInterval = setInterval(() => {
-      if (!this.isPaused) {
+      if (!this.isPaused && !this.isTimeFreezeActive) {
         this.time++;
         document.getElementById("time").textContent = this.ui.formatTime(
           this.time,

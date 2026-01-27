@@ -39,7 +39,7 @@ export class CameraController {
 
     // Momentum and inertia
     this.momentum = new THREE.Vector3();
-    this.momentumDecay = 0.85;
+    this.momentumDecay = 0.5; // Was 0.85 - faster stop (less slide)
     this.playerVelocity = new THREE.Vector3();
 
     // Camera shake
@@ -76,11 +76,11 @@ export class CameraController {
     // Mode-specific settings
     this.modeSettings = {
       [CameraMode.CHASE]: {
-        height: 22,
-        distance: 14,
-        speed: 0.08,
-        fov: 75,
-        lookAhead: 5,
+        height: 40, // High altitude for 2D view
+        distance: 0.1, // Almost perfectly top-down (0 would break LookAt)
+        speed: 0.5, // Very responsive
+        fov: 60, // Flatter field of view
+        lookAhead: 0, // No tilting - strict 2D feel
       },
       [CameraMode.CINEMATIC]: {
         height: 18,
@@ -90,18 +90,18 @@ export class CameraController {
         lookAhead: 8,
       },
       [CameraMode.BIRDS_EYE]: {
-        height: 35,
-        distance: 5,
+        height: 45,
+        distance: 1,
         speed: 0.15,
-        fov: 90,
+        fov: 70,
         lookAhead: 0,
       },
       [CameraMode.DYNAMIC]: {
-        height: 22,
-        distance: 14,
-        speed: 0.08,
-        fov: 75,
-        lookAhead: 5,
+        height: 40,
+        distance: 0.1,
+        speed: 0.5,
+        fov: 60,
+        lookAhead: 0,
       },
       [CameraMode.FIRST_PERSON]: {
         height: 3,
@@ -284,7 +284,10 @@ export class CameraController {
     return new THREE.Vector3(
       this.playerPosition.x + mouseOffset.x * 2 - this.lookAheadOffset.x * 0.3,
       this.currentHeight,
-      this.playerPosition.z + settings.distance + mouseOffset.y * 2,
+      this.playerPosition.z +
+        settings.distance +
+        mouseOffset.y * 2 -
+        this.lookAheadOffset.z * 0.3,
     );
   }
 
@@ -398,26 +401,17 @@ export class CameraController {
       this.deltaTime *
       60;
 
-    // Smooth 3D interpolation
-    const diff = new THREE.Vector3().subVectors(
-      zoomedPos,
-      this.camera.position,
-    );
-    const distance = diff.length();
+    // RIGID LOCK: X and Z axes are locked 1:1 to target (no smoothing)
+    // This prevents "view angle lag" where camera trails behind player movement.
+    // We only smooth Y (height) and Zoom.
+    this.camera.position.x = zoomedPos.x + this.shakeOffset.x;
+    this.camera.position.z = zoomedPos.z + this.shakeOffset.z;
 
-    // Adaptive speed based on distance
-    const adaptiveSpeed = Math.min(speed * (1 + distance * 0.05), speed * 2);
-
-    // Add momentum
-    this.momentum.add(diff.multiplyScalar(adaptiveSpeed * 0.3));
-    this.momentum.multiplyScalar(this.momentumDecay);
-
-    // Update camera position
-    this.camera.position.add(diff.multiplyScalar(adaptiveSpeed));
-    this.camera.position.add(this.momentum);
-
-    // Apply shake offset
-    this.camera.position.add(this.shakeOffset);
+    // Smooth Y interpolation (Height)
+    const adaptiveSpeed = Math.min(speed, 0.5); // Cap smoothing speed
+    const diffY = zoomedPos.y - this.camera.position.y;
+    this.camera.position.y += diffY * adaptiveSpeed * 0.5; // Smoother height
+    this.camera.position.y += this.shakeOffset.y; // Add shake offset
 
     // Calculate and apply look-at target
     this.calculateLookAhead();
@@ -425,11 +419,15 @@ export class CameraController {
     const lookAtTarget = new THREE.Vector3(
       this.playerPosition.x + this.lookAheadOffset.x * 0.5,
       0.5, // Look at player torso level
-      this.playerPosition.z - this.lookAheadDistance * 0.3,
+      this.playerPosition.z + this.lookAheadOffset.z * 0.5,
     );
 
-    // Smooth look-at transition
-    this.currentLookAt.lerp(lookAtTarget, 0.1);
+    // Lock LookAt X/Z instantly as well to match position
+    this.currentLookAt.x = lookAtTarget.x;
+    this.currentLookAt.z = lookAtTarget.z;
+    // Smooth LookAt Y only
+    this.currentLookAt.y += (lookAtTarget.y - this.currentLookAt.y) * 0.1;
+
     this.camera.lookAt(this.currentLookAt);
 
     return {

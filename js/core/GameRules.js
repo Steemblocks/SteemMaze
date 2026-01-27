@@ -147,11 +147,11 @@ export const GameRules = {
     // START: 4 zombies (was 2) - Ensure early game has SOME threat
     if (level <= 3) return 3 + level; // L1=4, L2=5, L3=6
 
-    // Mid Game: 6 to 15
+    // Mid Game: 6 to 15 (Reduced 30% from old formula: 6 + tier * 3)
     const tier = Math.floor((level - 4) / 4);
-    const count = 6 + tier * 3;
+    const count = 4 + tier * 2; // Was 6 + tier * 3
 
-    return Math.min(count, 35); // Cap at 35 (was 40)
+    return Math.min(count, 25); // Cap at 25 (was 35)
   },
 
   /**
@@ -165,11 +165,11 @@ export const GameRules = {
     // L3: 2, L4: 3, L5: 4...
     if (level <= 5) return level - 1;
 
-    // Scaling
+    // Scaling (Reduced 30%)
     const tier = Math.floor((level - 6) / 5);
-    const count = 5 + tier * 4;
+    const count = 4 + tier * 3; // Was 5 + tier * 4
 
-    return Math.min(count, 30); // Cap at 30 (was 60 - way too many!)
+    return Math.min(count, 20); // Cap at 20 (was 30)
   },
 
   /**
@@ -262,14 +262,15 @@ export const GameRules = {
     if (level >= 5 && bossCount === 0) bossCount = 1;
 
     // Zombies & Dogs: Tiered increase (DOGS > ZOMBIES)
+    // REDUCED BY 30% for performance
     const tier = Math.floor((level - 1) / 5);
-    const zombieCount = 3 + tier * 3; // Lower growth for zombies
-    const dogCount = 6 + tier * 8; // MASSIVE growth for dogs
+    const zombieCount = 2 + tier * 2; // Was 3 + tier * 3
+    const dogCount = 4 + tier * 5; // Was 6 + tier * 8
 
     return {
-      bossCount: Math.min(bossCount, 6), // Cap at 6 bosses
-      zombieCount: Math.min(zombieCount, 30), // Max 30 horde zombies
-      dogCount: Math.min(dogCount, 50), // Max 50 horde dogs
+      bossCount: Math.min(bossCount, 4), // Cap at 4 bosses (was 6)
+      zombieCount: Math.min(zombieCount, 20), // Max 20 horde zombies (was 30)
+      dogCount: Math.min(dogCount, 30), // Max 30 horde dogs (was 50)
     };
   },
 
