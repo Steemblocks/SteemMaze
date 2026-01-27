@@ -36,6 +36,15 @@ export class GameData {
         volume: 70,
         mobileControls: true,
         vibration: true,
+        cameraShake: false, // Disabled by default to prevent motion sickness
+
+        // Detailed Audio Settings
+        footstepSound: true,
+        zombieSound: true, // Zombies & Monsters
+        dogSound: true,
+        monsterSound: true, // Standard Monsters
+        bigfootSound: true, // Bigfoot Boss
+        hordeBossSound: true, // Horde Boss & Events
       },
       leaderboard: [],
     };
@@ -75,7 +84,8 @@ export class GameData {
 
   /**
    * Restore game data from blockchain records
-   * Merges blockchain data with current local data, taking the maximum values
+   * Merges blockchain data with current local data
+   * SIMPLE LOGIC: The most recent record is the source of truth.
    */
   restoreFromBlockchain(gameRecords) {
     if (!gameRecords || gameRecords.length === 0) {
@@ -83,124 +93,77 @@ export class GameData {
       return false;
     }
 
+    // 1. Get the most recent record
+    // records are sorted newest first
+    const mostRecent = gameRecords[0];
+
+    // 2. IF it has stats (Modern Record), usage is simple: Trust it fully.
+    // This handles "Resets" perfectly because a Reset record has stats with 0s.
+    if (mostRecent.stats) {
+      console.log("Restoring from most recent blockchain record (Simple Mode)");
+      const s = mostRecent.stats;
+
+      this.data.gamesPlayed = s.games_played || 0;
+      this.data.wins = s.wins || 0;
+      this.data.losses = s.losses || 0;
+      this.data.bestScore = s.best_score || 0;
+      this.data.highestLevel = s.highest_level ?? 1;
+      this.data.currentLevel = this.data.highestLevel + 1;
+      this.data.totalCoins = s.total_coins || 0;
+      this.data.totalZombiesPurified = s.total_zombies_purified || 0;
+      this.data.totalSteps = s.total_steps || 0;
+
+      // Time might be in game object or stats
+      this.data.bestTime =
+        s.best_time || (mostRecent.game ? mostRecent.game.time : null);
+
+      this.save();
+      return true;
+    }
+
+    // 3. FALLBACK: Legacy Scan
+    // Only happens if the latest record is very old and has no 'stats' block.
+    console.log("Modern stats not found, using legacy scan...");
+
     let updatedStats = {
       gamesPlayed: 0,
       wins: 0,
-      bestScore: this.data.bestScore || 0,
-      bestTime: this.data.bestTime,
+      bestScore: 0,
+      bestTime: null,
       totalSteps: 0,
-      highestLevel: this.data.highestLevel || 1,
-      totalCoins: this.data.totalCoins || 0,
-      totalZombiesPurified: this.data.totalZombiesPurified || 0,
-      totalGemsCollected: 0,
-      threeStarGames: 0,
+      highestLevel: 1,
+      totalCoins: 0,
+      totalZombiesPurified: 0,
     };
 
-    // Process each game record from blockchain
     for (const record of gameRecords) {
       const game = record.game;
       if (!game) continue;
 
-      // Count games
       updatedStats.gamesPlayed++;
-
-      // Track steps/moves
-      if (game.moves) {
-        updatedStats.totalSteps += game.moves;
-      }
-
-      // Count wins and three-star games
-      if (game.stars === 3) {
-        updatedStats.threeStarGames++;
-      }
-      // Any completed game is a win
       updatedStats.wins++;
-
-      // Track gems
-      if (game.gems_collected) {
-        updatedStats.totalGemsCollected += game.gems_collected;
-      }
-
-      // Best score (take maximum)
-      if (game.score && game.score > updatedStats.bestScore) {
+      if (game.moves) updatedStats.totalSteps += game.moves;
+      if (game.score && game.score > updatedStats.bestScore)
         updatedStats.bestScore = game.score;
-      }
+      if (game.level && game.level > updatedStats.highestLevel)
+        updatedStats.highestLevel = game.level;
 
-      // Best time (take minimum - lower is better)
       if (game.time) {
         if (!updatedStats.bestTime || game.time < updatedStats.bestTime) {
           updatedStats.bestTime = game.time;
         }
       }
-
-      // Highest level reached
-      if (game.level && game.level > updatedStats.highestLevel) {
-        updatedStats.highestLevel = game.level;
-      }
-
-      // If this record has stats object, use the highest values
-      if (record.stats) {
-        if (record.stats.total_coins > updatedStats.totalCoins) {
-          updatedStats.totalCoins = record.stats.total_coins;
-        }
-        if (
-          record.stats.total_zombies_purified >
-          updatedStats.totalZombiesPurified
-        ) {
-          updatedStats.totalZombiesPurified =
-            record.stats.total_zombies_purified;
-        }
-        if (record.stats.highest_level > updatedStats.highestLevel) {
-          updatedStats.highestLevel = record.stats.highest_level;
-        }
-        if (
-          record.stats.best_score &&
-          record.stats.best_score > updatedStats.bestScore
-        ) {
-          updatedStats.bestScore = record.stats.best_score;
-        }
-      }
     }
 
-    // Apply restored stats to local data (take max of local vs blockchain)
-    this.data.gamesPlayed = Math.max(
-      this.data.gamesPlayed || 0,
-      updatedStats.gamesPlayed,
-    );
-    this.data.wins = Math.max(this.data.wins || 0, updatedStats.wins);
-    this.data.bestScore = Math.max(
-      this.data.bestScore || 0,
-      updatedStats.bestScore,
-    );
-    this.data.totalSteps = Math.max(
-      this.data.totalSteps || 0,
-      updatedStats.totalSteps,
-    );
-    this.data.highestLevel = Math.max(
-      this.data.highestLevel || 1,
-      updatedStats.highestLevel,
-    );
-    // Set current level to next level after highest completed
+    this.data.gamesPlayed = updatedStats.gamesPlayed;
+    this.data.wins = updatedStats.wins;
+    this.data.bestScore = updatedStats.bestScore;
+    this.data.totalSteps = updatedStats.totalSteps;
+    this.data.highestLevel = updatedStats.highestLevel;
     this.data.currentLevel = this.data.highestLevel + 1;
-    this.data.totalCoins = Math.max(
-      this.data.totalCoins || 0,
-      updatedStats.totalCoins,
-    );
-    this.data.totalZombiesPurified = Math.max(
-      this.data.totalZombiesPurified || 0,
-      updatedStats.totalZombiesPurified,
-    );
+    this.data.bestTime = updatedStats.bestTime;
 
-    // Best time - take lowest (best time means fastest)
-    if (updatedStats.bestTime) {
-      if (!this.data.bestTime || updatedStats.bestTime < this.data.bestTime) {
-        this.data.bestTime = updatedStats.bestTime;
-      }
-    }
-
-    // Save updated data
     this.save();
-
     return true;
   }
 

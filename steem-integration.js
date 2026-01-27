@@ -900,7 +900,32 @@ ${
 
             if (!game) continue;
 
-            // Scan ALL records to find the TRUE highest values
+            // Check for Reset: If the most recent record (or any recent one) indicates a reset,
+            // we should stop scanning at that point.
+            // A reset is indicated by stats.games_played === 0
+
+            let validRecords = records;
+            let resetIndex = -1;
+
+            for (let i = 0; i < records.length; i++) {
+              const r = records[i];
+              if (
+                r.stats &&
+                r.stats.games_played === 0 &&
+                r.stats.highest_level <= 1
+              ) {
+                resetIndex = i;
+                break;
+              }
+            }
+
+            if (resetIndex >= 0) {
+              // Keep only records NEWER than or equal to the reset
+              // (Reset record itself is fine to include as it has 0 stats)
+              validRecords = records.slice(0, resetIndex + 1);
+            }
+
+            // Scan VALID records to find the TRUE highest values
             // This prevents issues where replaying a lower level shows incorrect data
             let trueHighestLevel = 0;
             let trueBestScore = 0;
@@ -908,7 +933,7 @@ ${
             let totalGems = 0;
             let threeStarCount = 0;
 
-            for (const record of records) {
+            for (const record of validRecords) {
               const g = record.game;
               const s = record.stats;
 

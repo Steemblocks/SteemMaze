@@ -414,7 +414,7 @@ export class UIManager {
           try {
             // Post 0 stats to blockchain to effectively reset progress
             const resetData = {
-              level: 1,
+              level: 0,
               score: 0,
               time: 0,
               moves: 0,
@@ -428,7 +428,7 @@ export class UIManager {
               totalCoins: 0,
               totalZombiesPurified: 0,
               totalSteps: 0,
-              highestLevel: 1,
+              highestLevel: 0,
               bestScore: 0,
               achievements: [], // Clear achievements
             };
@@ -528,7 +528,8 @@ export class UIManager {
 
   /**
    * Sync game data from blockchain
-   * Fetches the most recent records and updates local data if blockchain has newer/better data
+   * Uses ONLY the most recent record's data - this is the source of truth
+   * Each game record contains cumulative stats that represent the player's current state
    */
   async syncFromBlockchain(username, statusEl = null) {
     try {
@@ -539,7 +540,7 @@ export class UIManager {
       // Fetch game records from custom_json operations
       const records = await steemIntegration.fetchGameRecordsFromCustomJson(
         username,
-        100, // Fetch last 100 records for sync
+        10, // Only need recent records - most recent is the source of truth
       );
 
       if (records.length === 0) {
@@ -550,73 +551,38 @@ export class UIManager {
         return;
       }
 
-      // Analyze blockchain data to find stats
-      let blockchainStats = {
-        highestLevel: 0,
-        bestScore: 0,
-        gamesPlayed: records.length,
-        totalCoins: 0,
-        totalZombiesPurified: 0,
-        totalSteps: 0,
-        wins: records.length, // Every completed game is a win
-        losses: 0,
-        bestTime: null,
-      };
+      // Get the most recent record (already sorted by timestamp desc)
+      // This is the SOURCE OF TRUTH - it contains cumulative stats
+      const mostRecentRecord = records[0];
+      const mostRecentGame = mostRecentRecord.game || {};
+      const mostRecentStats = mostRecentRecord.stats || {};
 
-      // Get the most recent record's stats (contains cumulative data)
-      const mostRecentRecord = records[0]; // Already sorted by timestamp desc
-      if (mostRecentRecord.stats) {
-        const stats = mostRecentRecord.stats;
-        blockchainStats.gamesPlayed = stats.games_played || records.length;
-        blockchainStats.wins = stats.wins || records.length;
-        blockchainStats.losses = stats.losses || 0;
-        blockchainStats.totalCoins = stats.total_coins || 0;
-        blockchainStats.totalZombiesPurified =
-          stats.total_zombies_purified || 0;
-        blockchainStats.totalSteps = stats.total_steps || 0;
-        blockchainStats.highestLevel = stats.highest_level || 0;
-        blockchainStats.bestScore = stats.best_score || 0;
-      }
+      // Use the stats from the most recent record directly
+      // These are cumulative stats that represent the player's current state
+      const highestLevel =
+        mostRecentStats.highest_level ?? mostRecentGame.level ?? 1;
+      const bestScore = mostRecentStats.best_score || mostRecentGame.score || 0;
+      const gamesPlayed = mostRecentStats.games_played || 0;
+      const wins = mostRecentStats.wins || 0;
+      const losses = mostRecentStats.losses || 0;
+      const totalCoins = mostRecentStats.total_coins || 0;
+      const totalZombiesPurified = mostRecentStats.total_zombies_purified || 0;
+      const totalSteps = mostRecentStats.total_steps || 0;
 
-      // Also scan all records to find absolute best values
-      for (const record of records) {
-        if (record.game) {
-          const game = record.game;
-          if ((game.level || 0) > blockchainStats.highestLevel) {
-            blockchainStats.highestLevel = game.level;
-          }
-          if ((game.score || 0) > blockchainStats.bestScore) {
-            blockchainStats.bestScore = game.score;
-          }
-          if (
-            game.time &&
-            (!blockchainStats.bestTime || game.time < blockchainStats.bestTime)
-          ) {
-            blockchainStats.bestTime = game.time;
-          }
-          if (game.moves) {
-            blockchainStats.totalSteps += game.moves;
-          }
-        }
-      }
-
-      // Apply all blockchain data to local storage (we start from defaults, so just set everything)
-      this.gameData.set("highestLevel", blockchainStats.highestLevel);
-      this.gameData.set("currentLevel", blockchainStats.highestLevel + 1);
-      this.gameData.set("bestScore", blockchainStats.bestScore);
-      this.gameData.set("bestTime", blockchainStats.bestTime);
-      this.gameData.set("gamesPlayed", blockchainStats.gamesPlayed);
-      this.gameData.set("wins", blockchainStats.wins);
-      this.gameData.set("losses", blockchainStats.losses);
-      this.gameData.set("totalCoins", blockchainStats.totalCoins);
-      this.gameData.set(
-        "totalZombiesPurified",
-        blockchainStats.totalZombiesPurified,
-      );
-      this.gameData.set("totalSteps", blockchainStats.totalSteps);
+      // Apply data from most recent record to local storage
+      this.gameData.set("highestLevel", highestLevel);
+      this.gameData.set("currentLevel", highestLevel + 1);
+      this.gameData.set("bestScore", bestScore);
+      this.gameData.set("bestTime", mostRecentGame.time || null);
+      this.gameData.set("gamesPlayed", gamesPlayed);
+      this.gameData.set("wins", wins);
+      this.gameData.set("losses", losses);
+      this.gameData.set("totalCoins", totalCoins);
+      this.gameData.set("totalZombiesPurified", totalZombiesPurified);
+      this.gameData.set("totalSteps", totalSteps);
 
       if (statusEl) {
-        statusEl.textContent = `Data restored! ${records.length} game records found.`;
+        statusEl.textContent = `Data synced! Level ${highestLevel}, Score ${bestScore}`;
       }
     } catch (error) {
       console.error("Error syncing from blockchain:", error);
@@ -640,6 +606,13 @@ export class UIManager {
       volumeSlider: { key: "volume", parse: (v) => parseInt(v) },
       mobileControlsToggle: { key: "mobileControls", isToggle: true },
       vibrationToggle: { key: "vibration", isToggle: true },
+      cameraShakeToggle: { key: "cameraShake", isToggle: true },
+      footstepSoundToggle: { key: "footstepSound", isToggle: true },
+      zombieSoundToggle: { key: "zombieSound", isToggle: true },
+      dogSoundToggle: { key: "dogSound", isToggle: true },
+      monsterSoundToggle: { key: "monsterSound", isToggle: true },
+      bigfootSoundToggle: { key: "bigfootSound", isToggle: true },
+      hordeBossSoundToggle: { key: "hordeBossSound", isToggle: true },
     };
 
     Object.entries(settings).forEach(([id, config]) => {
@@ -771,6 +744,13 @@ export class UIManager {
     set("volumeSlider", s.volume);
     set("mobileControlsToggle", s.mobileControls, true);
     set("vibrationToggle", s.vibration, true);
+    set("cameraShakeToggle", s.cameraShake, true);
+    set("footstepSoundToggle", s.footstepSound, true);
+    set("zombieSoundToggle", s.zombieSound, true);
+    set("dogSoundToggle", s.dogSound, true);
+    set("monsterSoundToggle", s.monsterSound, true);
+    set("bigfootSoundToggle", s.bigfootSound, true);
+    set("hordeBossSoundToggle", s.hordeBossSound, true);
 
     // Load node selector
     const steemNodeSelect = document.getElementById("steemNodeSelect");

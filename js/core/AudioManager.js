@@ -173,6 +173,37 @@ export class AudioManager {
   play(name, volumeScale = 1.0) {
     if (this.muted || !this.sounds[name]) return;
 
+    // Granular Audio Checks based on Settings
+    if (window.game && window.game.gameData) {
+      const s = window.game.gameData;
+
+      // Footsteps
+      if (name === "footsteps" && !s.getSetting("footstepSound")) return;
+
+      // Zombies (Ambient & Growls)
+      if (
+        (name === "zombieAmbient" || name === "zombieGrowl") &&
+        !s.getSetting("zombieSound")
+      )
+        return;
+
+      // Dogs
+      if (name === "dogBark" && !s.getSetting("dogSound")) return;
+
+      // Monsters
+      if (name === "monsterGrowl" && !s.getSetting("monsterSound")) return;
+
+      // Bigfoot
+      if (name === "bigfootRoar" && !s.getSetting("bigfootSound")) return;
+
+      // Horde Boss & Events
+      if (
+        (name === "hordeScream" || name === "bossSpawn") &&
+        !s.getSetting("hordeBossSound")
+      )
+        return;
+    }
+
     // Throttle check for rapid-fire sounds
     const throttleTime = this.getThrottleTime(name);
     if (throttleTime > 0) {

@@ -166,8 +166,18 @@ export class Game {
   }
 
   get MAZE_SIZE() {
-    const baseSize = this.gameData.getSetting("mazeSize") || 15;
-    return GameRules.getMazeSize(this.level, baseSize);
+    // 1. Check for manual override from Settings UI
+    // If user sets a custom size in Settings ("Maze Size 15, 20, 25..."), use it as BASE for level scaling
+    const settingsBase = this.gameData.getSetting("mazeSize");
+
+    // 2. Combine with level progression
+    const calculatedSize = GameRules.getMazeSize(
+      this.level,
+      settingsBase || 15,
+    );
+
+    // 3. Clamp for safety (min 10x10, max 60x60 for performance)
+    return Math.max(10, Math.min(60, calculatedSize));
   }
 
   initBackground() {
@@ -2577,6 +2587,9 @@ export class Game {
         this.coinsCollected++;
         // NOTE: We do NOT save to disk here. Coins are only secured on Level Complete or Game Over.
 
+        // Anti-farming check: ensure we handle display correctly
+        // But do not persist to GameData yet.
+
         // Update UI
         const coinEl = document.getElementById("coinsDisplay");
         if (coinEl) coinEl.textContent = this.totalCoins;
@@ -3621,6 +3634,14 @@ export class Game {
 
   resetGame() {
     this.cleanup(); // Ensure everything is stopped before resetting
+    // Reload persistent data from disk to ensure we discard any unsaved in-memory progress
+    // This is CRITICAL for preventing coin farming (collect -> exit -> resume -> repeat)
+    this.gameData.data = this.gameData.load();
+    this.totalCoins = this.gameData.get("totalCoins") || 0;
+
+    // Update UI immediately
+    const coinEl = document.getElementById("coinsDisplay");
+    if (coinEl) coinEl.textContent = this.totalCoins;
     this.moves = 0;
     this.time = 0;
     this.won = false;
@@ -3955,9 +3976,12 @@ export class Game {
       // Update player position for camera tracking
       this.cameraController.setPlayerPosition(this.playerMesh.position);
 
-      // Apply camera shake from game events (smooth decay)
+      // Apply camera shake from game events only if setting enabled
       if (this.cameraShake > 0) {
-        this.cameraController.shake(this.cameraShake, 0.2);
+        const shakeEnabled = this.gameData.getSetting("cameraShake");
+        if (shakeEnabled) {
+          this.cameraController.shake(this.cameraShake, 0.2);
+        }
         this.cameraShake = Math.max(0, this.cameraShake - smoothDelta * 3);
       }
 
@@ -3968,23 +3992,33 @@ export class Game {
       });
     } else {
       // === LEGACY CAMERA (fallback) - using smooth lerp ===
-      let targetCamX = this.playerMesh.position.x + this.mouseX * 2;
-      let targetCamZ = this.playerMesh.position.z + 14 + this.mouseY * 2;
+      // Reduced mouse sensitivity for comfort (was 2.0)
+      let targetCamX = this.playerMesh.position.x + this.mouseX * 1.0;
+      let targetCamZ = this.playerMesh.position.z + 14 + this.mouseY * 1.0;
       let targetCamY = 22;
 
-      // Apply camera shake with smooth decay
+      // Camera shake disabled by default to prevent motion sickness
+      // Only apply if user explicitly enables it in settings
       if (this.cameraShake > 0) {
-        const shakeIntensity = this.cameraShake * 0.5;
-        targetCamX += (Math.random() - 0.5) * shakeIntensity;
-        targetCamZ += (Math.random() - 0.5) * shakeIntensity;
+        const shakeEnabled = this.gameData.getSetting("cameraShake");
+        if (shakeEnabled) {
+          const shakeIntensity = this.cameraShake * 0.5;
+          targetCamX += (Math.random() - 0.5) * shakeIntensity;
+          targetCamZ += (Math.random() - 0.5) * shakeIntensity;
+        }
+        // Always decay the shake value even if disabled (to keep game logic consistent)
         this.cameraShake = Math.max(0, this.cameraShake - smoothDelta * 3);
       }
 
       const camSpeedSetting = this.gameData.getSetting("cameraSpeed") || 5;
-      const baseSpeed = Math.min((camSpeedSetting / 100) * 2.5, 0.25);
+      // Reduced max speed for smoother follow (was 2.5 multiplier, now 1.2)
+      // This creates a "heavy" camera feel that absorbs sudden movements
+      const baseSpeed = Math.min((camSpeedSetting / 100) * 1.2, 0.15);
 
       // Smooth lerp camera position
+      // Using time-based lerp for consistency
       const lerpFactor = 1 - Math.pow(1 - baseSpeed, smoothDelta * 60);
+
       this.camera.position.x +=
         (targetCamX - this.camera.position.x) * lerpFactor;
       this.camera.position.y +=
@@ -3996,7 +4030,26 @@ export class Game {
       const lookAheadY = 0.5;
       const lookAheadZ = this.playerMesh.position.z - 5;
 
-      this.camera.lookAt(new THREE.Vector3(lookAheadX, lookAheadY, lookAheadZ));
+      // Smooth LookAt transition to prevent shaking on move
+      if (!this.cameraCurrentLookAt) {
+        this.cameraCurrentLookAt = new THREE.Vector3(
+          lookAheadX,
+          lookAheadY,
+          lookAheadZ,
+        );
+      }
+
+      const targetLookAt = new THREE.Vector3(
+        lookAheadX,
+        lookAheadY,
+        lookAheadZ,
+      );
+
+      // Very soft rotation smoothing (was 0.15, now 0.06)
+      // This prevents the "snap" when player turns or teleports
+      this.cameraCurrentLookAt.lerp(targetLookAt, 0.06);
+
+      this.camera.lookAt(this.cameraCurrentLookAt);
     }
 
     // === PLAYER ANIMATION ===

@@ -167,7 +167,7 @@ export class CameraController {
     // Calculate player movement velocity
     this.playerVelocity.subVectors(
       this.playerPosition,
-      this.lastPlayerPosition
+      this.lastPlayerPosition,
     );
     this.playerMovementSpeed = this.playerVelocity.length();
   }
@@ -250,7 +250,7 @@ export class CameraController {
       this.shakeOffset.set(
         (Math.random() - 0.5) * intensity,
         (Math.random() - 0.5) * intensity * 0.5,
-        (Math.random() - 0.5) * intensity
+        (Math.random() - 0.5) * intensity,
       );
       this.shakeDuration -= dt;
       this.shakeIntensity *= 0.92;
@@ -284,7 +284,7 @@ export class CameraController {
     return new THREE.Vector3(
       this.playerPosition.x + mouseOffset.x * 2 - this.lookAheadOffset.x * 0.3,
       this.currentHeight,
-      this.playerPosition.z + settings.distance + mouseOffset.y * 2
+      this.playerPosition.z + settings.distance + mouseOffset.y * 2,
     );
   }
 
@@ -297,7 +297,7 @@ export class CameraController {
     return new THREE.Vector3(
       this.playerPosition.x + Math.sin(this.orbitAngle) * this.orbitRadius,
       this.orbitHeight,
-      this.playerPosition.z + Math.cos(this.orbitAngle) * this.orbitRadius
+      this.playerPosition.z + Math.cos(this.orbitAngle) * this.orbitRadius,
     );
   }
 
@@ -308,7 +308,7 @@ export class CameraController {
     return new THREE.Vector3(
       this.playerPosition.x,
       this.modeSettings[CameraMode.BIRDS_EYE].height,
-      this.playerPosition.z + this.modeSettings[CameraMode.BIRDS_EYE].distance
+      this.playerPosition.z + this.modeSettings[CameraMode.BIRDS_EYE].distance,
     );
   }
 
@@ -323,7 +323,7 @@ export class CameraController {
       this.modeSettings[CameraMode.FIRST_PERSON].height,
       this.playerPosition.z +
         this.modeSettings[CameraMode.FIRST_PERSON].distance -
-        this.lookAheadOffset.z * 0.1
+        this.lookAheadOffset.z * 0.1,
     );
   }
 
@@ -382,17 +382,26 @@ export class CameraController {
     const zoomedPos = targetPos.clone();
     zoomedPos.y *= this.currentZoom;
 
+    // Get user-configured speed from GameData
+    let userSpeedMultiplier = 1.0;
+    if (this.gameData) {
+      const spd = this.gameData.getSetting("cameraSpeed") || 5;
+      // Map 1-10 to 0.5x - 2.0x
+      userSpeedMultiplier = 0.5 + (spd - 1) * (1.5 / 9);
+    }
+
     // Calculate smooth camera movement with momentum
     const speed =
       this.modeSettings[this.mode].speed *
       adjustments.speedMultiplier *
+      userSpeedMultiplier *
       this.deltaTime *
       60;
 
     // Smooth 3D interpolation
     const diff = new THREE.Vector3().subVectors(
       zoomedPos,
-      this.camera.position
+      this.camera.position,
     );
     const distance = diff.length();
 
@@ -416,7 +425,7 @@ export class CameraController {
     const lookAtTarget = new THREE.Vector3(
       this.playerPosition.x + this.lookAheadOffset.x * 0.5,
       0.5, // Look at player torso level
-      this.playerPosition.z - this.lookAheadDistance * 0.3
+      this.playerPosition.z - this.lookAheadDistance * 0.3,
     );
 
     // Smooth look-at transition
