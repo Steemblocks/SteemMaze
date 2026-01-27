@@ -62,7 +62,7 @@ export class PostProcessingManager {
       new THREE.Vector2(window.innerWidth, window.innerHeight),
       0.8, // Bloom strength (reduced)
       0.3, // Bloom radius (tighter)
-      0.9 // Bloom threshold (higher - only very bright things glow)
+      0.9, // Bloom threshold (higher - only very bright things glow)
     );
     bloomPass.threshold = 0.85; // High threshold - only emissive objects glow
     bloomPass.strength = 0.5; // Very subtle
@@ -179,7 +179,7 @@ export class ParticleTrailSystem {
       particle.userData.velocity.set(
         (Math.random() - 0.5) * 0.05,
         0.02 + Math.random() * 0.03,
-        (Math.random() - 0.5) * 0.05
+        (Math.random() - 0.5) * 0.05,
       );
 
       particle.userData.life = particle.userData.maxLife;
@@ -203,7 +203,7 @@ export class ParticleTrailSystem {
       particle.userData.velocity.set(
         Math.cos(angle) * speed,
         0.05 + Math.random() * 0.08,
-        Math.sin(angle) * speed
+        Math.sin(angle) * speed,
       );
 
       if (color) {
@@ -345,7 +345,7 @@ export class SkyboxManager {
 
     starsGeometry.setAttribute(
       "position",
-      new THREE.BufferAttribute(positions, 3)
+      new THREE.BufferAttribute(positions, 3),
     );
     starsGeometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     starsGeometry.setAttribute("size", new THREE.BufferAttribute(sizes, 1));

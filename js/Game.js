@@ -494,11 +494,11 @@ export class Game {
   }
 
   setupLights() {
-    // Balanced ambient for visibility without washing out
-    this.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+    // High Ambient light to ensure visibility (Non-PBR workaround)
+    this.scene.add(new THREE.AmbientLight(0xffffff, 2.2));
 
-    // White directional sun light
-    const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+    // Bright directional sun light
+    const sun = new THREE.DirectionalLight(0xffffff, 2.5);
     sun.position.set(50, 100, 50);
     sun.castShadow = true;
     sun.shadow.camera.left = -100;
@@ -510,9 +510,9 @@ export class Game {
     sun.shadow.bias = -0.0005;
     this.scene.add(sun);
 
-    // Soft fill lights (white only, no colors)
-    const fillLight = new THREE.PointLight(0xffffff, 0.5, 80);
-    fillLight.position.set(0, 20, 0);
+    // Stronger interior fill light
+    const fillLight = new THREE.PointLight(0xffffff, 1.5, 150);
+    fillLight.position.set(0, 30, 0);
     this.scene.add(fillLight);
   }
 
@@ -528,10 +528,11 @@ export class Game {
         continue;
       verts[i + 2] = Math.random() * 0.5;
     }
+    // Changed to Lighter Earth Tone and removed Metalness
     const mat = new THREE.MeshStandardMaterial({
-      color: 0x064e3b,
-      roughness: 0.9,
-      metalness: 0.1,
+      color: 0x4e8a46, // Richer Green (More saturation, less pale)
+      roughness: 1.0, // Fully matte (absorbs/scatters light evenly)
+      metalness: 0.0, // REMOVED METALNESS - caused black look
       flatShading: true,
     });
     this.ground = new THREE.Mesh(geo, mat);
@@ -813,9 +814,9 @@ export class Game {
   createWall(x, z, w, d) {
     const geo = new THREE.BoxGeometry(w, this.WALL_HEIGHT, d);
     const mat = new THREE.MeshStandardMaterial({
-      color: 0x14532d,
-      roughness: 1,
-      metalness: 0,
+      color: 0x888888, // Light Grey
+      roughness: 1.0,
+      metalness: 0.0,
     });
     const wall = new THREE.Mesh(geo, mat);
     wall.position.set(x, this.WALL_HEIGHT / 2, z);
@@ -841,11 +842,79 @@ export class Game {
     // Use cached geometry/material if available or create new
     // Note: accessing global animationCache if imported, else fallback to local create
     // Assuming animationCache is globally available or I should use standard Three.js
+    // Generate Procedural Stone Texture
+    // Generate Procedural Stone Texture - Higher Res & Reduced Noise Freq
+    const createStoneTexture = () => {
+      const size = 1024; // Increased from 512 for better close-up quality
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+
+      // Base Noise Layer
+      ctx.fillStyle = "#999999";
+      ctx.fillRect(0, 0, size, size);
+
+      // Grain Noise - Larger grains to reduce pixel shimmy
+      for (let i = 0; i < 80000; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        const v = Math.floor(Math.random() * 40) + 140;
+        ctx.fillStyle = `rgba(${v},${v},${v}, 0.4)`;
+        ctx.fillRect(x, y, 3, 3); // Slightly larger grain
+      }
+
+      // Soft Clouds/Dirt (Add variegation)
+      for (let i = 0; i < 20; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        const r = Math.random() * 100 + 50;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, "rgba(0,0,0,0.1)");
+        g.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Cracks
+      ctx.strokeStyle = "rgba(80, 80, 80, 0.3)";
+      ctx.lineWidth = 2; // Thicker lines for visibility at distance
+      for (let i = 0; i < 15; i++) {
+        ctx.beginPath();
+        let cx = Math.random() * size;
+        let cy = Math.random() * size;
+        ctx.moveTo(cx, cy);
+        for (let j = 0; j < 10; j++) {
+          cx += (Math.random() - 0.5) * 80;
+          cy += (Math.random() - 0.5) * 80;
+          ctx.lineTo(cx, cy);
+        }
+        ctx.stroke();
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      // CRITICAL: filtering to fix "pixel broken" / aliasing
+      texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      return texture;
+    };
+
+    const stoneTexture = createStoneTexture();
+
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const material = new THREE.MeshStandardMaterial({
-      color: 0x14532d,
-      roughness: 1,
-      metalness: 0,
+      map: stoneTexture,
+      bumpMap: stoneTexture,
+      bumpScale: 0.02,
+      roughnessMap: stoneTexture,
+      color: 0x999999, // Darker grey to prevent BLOOM GLOW
+      roughness: 0.9,
+      metalness: 0.0,
     });
 
     const wallMesh = new THREE.InstancedMesh(
