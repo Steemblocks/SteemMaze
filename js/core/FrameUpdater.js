@@ -28,16 +28,28 @@ export class FrameUpdater {
     });
 
     // Skip if not on game screen or player not ready
-    if (!this.game.playerMesh || this.game.ui.currentScreen !== "gameScreen") return;
+    if (!this.game.playerMesh || this.game.ui.currentScreen !== "gameScreen")
+      return;
 
     // Get delta time for frame-rate independent animations
     const deltaTime = animationCache.deltaTime || 0.016;
     const smoothDelta = Math.min(deltaTime, 0.05); // Cap delta to prevent jumps
 
-    // === CAMERA SYSTEM ===
+    // === PLAYER ANIMATION (Updated FIRST for Camera Sync) ===
+    // Critical Fix: Update player position BEFORE camera tracks it
+    // This prevents 1-frame lag which causes "wobble" or "sliding ground"
+    if (this.game.player) {
+      this.game.player.update(smoothDelta);
+    }
+
+    // === CHECK IF PLAYER IS MOVING ===
+    // (Logic removed: Camera handling delegated entirely to CameraController for consistency)
+
     if (this.game.cameraController) {
-      // Update player position for camera tracking
-      this.game.cameraController.setPlayerPosition(this.game.playerMesh.position);
+      // Player idle AND CameraController exists: use it normally
+      this.game.cameraController.setPlayerPosition(
+        this.game.playerMesh.position,
+      );
 
       // Apply camera shake from game events only if setting enabled
       if (this.game.cameraShake > 0) {
@@ -45,7 +57,10 @@ export class FrameUpdater {
         if (shakeEnabled) {
           this.game.cameraController.shake(this.game.cameraShake, 0.2);
         }
-        this.game.cameraShake = Math.max(0, this.game.cameraShake - smoothDelta * 3);
+        this.game.cameraShake = Math.max(
+          0,
+          this.game.cameraShake - smoothDelta * 3,
+        );
       }
 
       // Update camera with mouse offset for interactive feel
@@ -54,14 +69,12 @@ export class FrameUpdater {
         y: this.game.mouseY,
       });
     } else {
-      // === LEGACY CAMERA (fallback) - using smooth lerp ===
-      // Reduced mouse sensitivity for comfort (was 2.0)
+      // Player idle AND no CameraController: use legacy system
       let targetCamX = this.game.playerMesh.position.x + this.game.mouseX * 1.0;
-      let targetCamZ = this.game.playerMesh.position.z + 14 + this.game.mouseY * 1.0;
+      let targetCamZ =
+        this.game.playerMesh.position.z + 14 + this.game.mouseY * 1.0;
       let targetCamY = 22;
 
-      // Camera shake disabled by default to prevent motion sickness
-      // Only apply if user explicitly enables it in settings
       if (this.game.cameraShake > 0) {
         const shakeEnabled = this.game.gameData.getSetting("cameraShake");
         if (shakeEnabled) {
@@ -69,17 +82,14 @@ export class FrameUpdater {
           targetCamX += (Math.random() - 0.5) * shakeIntensity;
           targetCamZ += (Math.random() - 0.5) * shakeIntensity;
         }
-        // Always decay the shake value even if disabled (to keep game logic consistent)
-        this.game.cameraShake = Math.max(0, this.game.cameraShake - smoothDelta * 3);
+        this.game.cameraShake = Math.max(
+          0,
+          this.game.cameraShake - smoothDelta * 3,
+        );
       }
 
       const camSpeedSetting = this.game.gameData.getSetting("cameraSpeed") || 5;
-      // Reduced max speed for smoother follow (was 2.5 multiplier, now 1.2)
-      // This creates a "heavy" camera feel that absorbs sudden movements
       const baseSpeed = Math.min((camSpeedSetting / 100) * 1.2, 0.15);
-
-      // Smooth lerp camera position
-      // Using time-based lerp for consistency
       const lerpFactor = 1 - Math.pow(1 - baseSpeed, smoothDelta * 60);
 
       this.game.camera.position.x +=
@@ -93,7 +103,6 @@ export class FrameUpdater {
       const lookAheadY = 0.5;
       const lookAheadZ = this.game.playerMesh.position.z - 5;
 
-      // Smooth LookAt transition to prevent shaking on move
       if (!this.game.cameraCurrentLookAt) {
         this.game.cameraCurrentLookAt = new THREE.Vector3(
           lookAheadX,
@@ -108,17 +117,11 @@ export class FrameUpdater {
         lookAheadZ,
       );
 
-      // Very soft rotation smoothing (was 0.15, now 0.06)
-      // This prevents the "snap" when player turns or teleports
       this.game.cameraCurrentLookAt.lerp(targetLookAt, 0.06);
-
       this.game.camera.lookAt(this.game.cameraCurrentLookAt);
     }
 
-    // === PLAYER ANIMATION ===
-    if (this.game.player) {
-      this.game.player.update(smoothDelta);
-    }
+    // === CHECK IF PLAYER IS MOVING ===
 
     // === COLLECTIBLES ANIMATION (delta-time based) ===
     // Goal animation using cached waves
@@ -222,6 +225,44 @@ export class FrameUpdater {
       f.position.y = 2 + animationCache.getWave(1, 1, f.userData.yOffset);
     });
 
+    // === EXPLODING BODY PARTS UPDATE ===
+    // Update and clean up scattered zombie/dog body parts
+    for (let i = this.game.explodingBodyParts.length - 1; i >= 0; i--) {
+      const part = this.game.explodingBodyParts[i];
+
+      // Update position with velocity
+      part.mesh.position.add(part.velocity);
+      part.velocity.y -= 0.01; // Gravity
+
+      // Update lifetime
+      part.life--;
+
+      // Fade out and scale
+      // Fade out and scale
+      const lifeRatio = part.life / part.maxLife;
+
+      // Safely handle opacity on Meshes or Groups of Meshes
+      const updateOpacity = (obj) => {
+        if (obj.isMesh && obj.material) {
+          obj.material.opacity = lifeRatio * 0.8;
+          // Ensure transparent is true so opacity works (idempotent)
+          if (!obj.material.transparent) obj.material.transparent = true;
+        }
+      };
+
+      // Apply to root or children
+      updateOpacity(part.mesh);
+      part.mesh.traverse(updateOpacity);
+
+      part.mesh.scale.multiplyScalar(0.98); // Slight shrink
+
+      // Remove when lifetime expires
+      if (part.life <= 0) {
+        this.game.scene.remove(part.mesh);
+        this.game.explodingBodyParts.splice(i, 1);
+      }
+    }
+
     // === EFFECTS SYSTEMS UPDATE ===
     if (this.game.particleTrail) {
       this.game.particleTrail.update();
@@ -237,7 +278,39 @@ export class FrameUpdater {
 
     // Update weather effects (rain, lightning)
     if (this.game.weatherManager) {
-      this.game.weatherManager.update(smoothDelta, this.game.playerMesh?.position);
+      this.game.weatherManager.update(
+        smoothDelta,
+        this.game.playerMesh?.position,
+      );
+    }
+
+    // === CENTRALIZED EXPLOSION UPDATES ===
+    // Updates flash/glow effects without using setInterval
+    if (this.game.activeExplosions && this.game.activeExplosions.length > 0) {
+      for (let i = this.game.activeExplosions.length - 1; i >= 0; i--) {
+        const explosion = this.game.activeExplosions[i];
+
+        // Update values
+        explosion.flashIntensity -= 15.0 * smoothDelta; // Approx 0.25 per 16ms
+        explosion.glowOpacity -= 6.0 * smoothDelta; // Approx 0.1 per 16ms
+        explosion.glowScale += 9.0 * smoothDelta; // Approx 0.15 per 16ms
+
+        if (explosion.flashIntensity > 0) {
+          explosion.flash.intensity = explosion.flashIntensity;
+          explosion.mesh.material.opacity = explosion.glowOpacity;
+          explosion.mesh.scale.setScalar(explosion.glowScale);
+        } else {
+          // Remove and Dispose
+          this.game.scene.remove(explosion.flash);
+          this.game.scene.remove(explosion.mesh);
+
+          // We reuse the generic geometry, but dispose the specific material instance because we set color on it
+          // (Optimization: In future we could pool materials too)
+          explosion.mesh.material.dispose();
+
+          this.game.activeExplosions.splice(i, 1);
+        }
+      }
     }
 
     // === RENDER ===
@@ -270,7 +343,11 @@ export class FrameUpdater {
    */
   updateAmbientSounds() {
     // Only play if game is active and not paused
-    if (this.game.isPaused || this.game.won || this.game.ui.currentScreen !== "gameScreen")
+    if (
+      this.game.isPaused ||
+      this.game.won ||
+      this.game.ui.currentScreen !== "gameScreen"
+    )
       return;
 
     const now = Date.now();
@@ -413,7 +490,10 @@ export class FrameUpdater {
 
     try {
       // Sync via UIManager reusing the existing logic
-      if (this.game.ui && typeof this.game.ui.syncFromBlockchain === "function") {
+      if (
+        this.game.ui &&
+        typeof this.game.ui.syncFromBlockchain === "function"
+      ) {
         await this.game.ui.syncFromBlockchain(steemIntegration.username);
 
         // After sync, update local Game instance state if we are in menu/idle

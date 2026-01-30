@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -19,10 +19,6 @@
       rel="stylesheet"
     />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <style>
-      /* Critical CSS to prevent FOUC */
-      :root {
-        -    <link rel="icon" type="image/png" href="/favicon.png" />
     <style>
       /* Critical CSS to prevent FOUC */
       :root {
@@ -92,18 +88,21 @@
         }
       }
     </style>
-    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/styles/main.css" />
   </head>
   <body>
     <!-- Preloader -->
     <div id="preloader">
       <div class="loader-content">
-        <div class="loader-spinner"></div>
+        <div class="loader-spinner">
+          <div class="core-glow"></div>
+        </div>
         <p class="loader-text">Loading...</p>
       </div>
     </div>
 
     <div id="app">
+      <div id="toast-container"></div>
       <canvas id="bgCanvas"></canvas>
 
       <!-- Login Screen -->
@@ -203,6 +202,15 @@
               ><span>Settings</span>
             </button>
           </div>
+          <!-- Manual Button (Top Right) -->
+          <button
+            id="manualBtn"
+            class="icon-btn manual-trigger"
+            aria-label="Game Manual"
+          >
+            <span class="material-icons-round">info</span>
+          </button>
+
           <div class="quick-stats">
             <div class="quick-stat">
               <span class="material-icons-round">emoji_events</span
@@ -234,6 +242,238 @@
           <div class="particle"></div>
           <div class="particle"></div>
           <div class="particle"></div>
+        </div>
+      </div>
+
+      <!-- Manual Modal -->
+      <div id="manualModal" class="modal-overlay">
+        <div class="modal-window">
+          <header class="modal-header">
+            <h2>Game Manual <span id="gameVersion" class="version-badge">v1.0.0</span></h2>
+            <button class="icon-btn close-modal" id="closeManualBtn">
+              <span class="material-icons-round">close</span>
+            </button>
+          </header>
+
+          <div class="manual-tabs">
+            <button class="tab-btn active" data-tab="instructions">
+              <span class="material-icons-round">school</span> Instructions
+            </button>
+            <button class="tab-btn" data-tab="shop">
+              <span class="material-icons-round">storefront</span> Shop & Items
+            </button>
+            <button class="tab-btn" data-tab="entities">
+              <span class="material-icons-round">pets</span> Entities
+            </button>
+            <button class="tab-btn" data-tab="scoring">
+              <span class="material-icons-round">emoji_events</span> Scoring
+            </button>
+          </div>
+
+          <div class="manual-content">
+            <!-- Instructions Tab -->
+            <div id="tab-instructions" class="tab-pane active">
+              <div class="manual-section">
+                <h3>
+                  <span class="material-icons-round">sports_esports</span>
+                  Controls
+                </h3>
+                <div class="control-grid">
+                  <div class="control-item">
+                    <span class="key">W</span> <span class="key">A</span>
+                    <span class="key">S</span> <span class="key">D</span>
+                    <p>Move Player</p>
+                  </div>
+                  <div class="control-item">
+                    <span class="key">Arrows</span>
+                    <p>Move Player</p>
+                  </div>
+                  <div class="control-item">
+                    <span class="key">Mouse</span>
+                    <p>Look Around</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="manual-section">
+                <h3>
+                  <span class="material-icons-round">flag</span> Objective
+                </h3>
+                <p>
+                  Find the <strong>Goal Portal</strong> to complete the level.
+                  Collect <strong>Gems</strong> to earn score and
+                  <strong>Coins</strong> to buy items.
+                </p>
+                <ul class="manual-list">
+                  <li>Avoid Zombies and Monsters.</li>
+                  <li>Maintain your Combo continuously for higher scores.</li>
+                  <li>Use Power-ups wisely.</li>
+                </ul>
+              </div>
+
+              <div class="manual-section">
+                <h3>
+                  <span class="material-icons-round">flash_on</span> Power-ups
+                </h3>
+                <div
+                  class="control-grid"
+                  style="
+                    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+                    gap: 8px;
+                  "
+                >
+                  <div class="control-item">
+                    <span
+                      class="material-icons-round"
+                      style="color: #3b82f6; font-size: 24px"
+                      >shield</span
+                    >
+                    <p style="margin-top: 4px; font-size: 0.75rem">Shield</p>
+                  </div>
+                  <div class="control-item">
+                    <span
+                      class="material-icons-round"
+                      style="color: #fbbf24; font-size: 24px"
+                      >bolt</span
+                    >
+                    <p style="margin-top: 4px; font-size: 0.75rem">Speed</p>
+                  </div>
+                  <div class="control-item">
+                    <span
+                      class="material-icons-round"
+                      style="color: #06b6d4; font-size: 24px"
+                      >ac_unit</span
+                    >
+                    <p style="margin-top: 4px; font-size: 0.75rem">Freeze</p>
+                  </div>
+                  <div class="control-item">
+                    <span
+                      class="material-icons-round"
+                      style="color: #a855f7; font-size: 24px"
+                      >explore</span
+                    >
+                    <p style="margin-top: 4px; font-size: 0.75rem">Magnet</p>
+                  </div>
+                  <div class="control-item">
+                    <span
+                      class="material-icons-round"
+                      style="color: #22c55e; font-size: 24px"
+                      >stars</span
+                    >
+                    <p style="margin-top: 4px; font-size: 0.75rem">2X Score</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Shop Tab -->
+            <div id="tab-shop" class="tab-pane">
+              <div class="shop-manual-grid">
+                <div class="item-card-manual">
+                  <span class="material-icons-round item-icon">light_mode</span>
+                  <h4>Light Burst</h4>
+                  <p>Boosts visibility and scares enemies for 5 seconds.</p>
+                  <span class="cost">10 Coins</span>
+                </div>
+                <div class="item-card-manual">
+                  <span class="material-icons-round item-icon">science</span>
+                  <h4>Potion</h4>
+                  <p>
+                    Grants invincibility and destroys zombies on contact for 10
+                    seconds.
+                  </p>
+                  <span class="cost">50 Coins</span>
+                </div>
+                <div class="item-card-manual">
+                  <span class="material-icons-round item-icon">blur_off</span>
+                  <h4>Fog Remover</h4>
+                  <p>Clears map fog for 20 seconds.</p>
+                  <span class="cost">25 Coins</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Entities Tab -->
+            <div id="tab-entities" class="tab-pane">
+              <div class="entity-manual-list">
+                <div class="entity-card">
+                  <div class="entity-preview zombie">
+                    <span class="material-icons-round">directions_walk</span>
+                  </div>
+                  <div class="entity-info">
+                    <h4>Zombie</h4>
+                    <p>Slow moving basic enemy. Avoid contact or use Potion.</p>
+                  </div>
+                </div>
+                <div class="entity-card">
+                  <div class="entity-preview dog">
+                    <span class="material-icons-round">pets</span>
+                  </div>
+                  <div class="entity-info">
+                    <h4>Hell Hound</h4>
+                    <p>Fast chaser. Hard to outrun. Use Speed Boost.</p>
+                  </div>
+                </div>
+                <div class="entity-card">
+                  <div class="entity-preview monster">
+                    <span class="material-icons-round">mood_bad</span>
+                  </div>
+                  <div class="entity-info">
+                    <h4>Monster</h4>
+                    <p>Common enemy. Worth 50 Points.</p>
+                  </div>
+                </div>
+                <div class="entity-card">
+                  <div class="entity-preview angel">
+                    <span class="material-icons-round">warning</span>
+                  </div>
+                  <div class="entity-info">
+                    <h4>Fallen Angel</h4>
+                    <p>Mini-Boss with Crimson Aura. Worth 150 Points.</p>
+                  </div>
+                </div>
+                <div class="entity-card">
+                  <div class="entity-preview boss">
+                    <span class="material-icons-round">api</span>
+                  </div>
+                  <div class="entity-info">
+                    <h4>Bigfoot Boss</h4>
+                    <p>
+                      Massive and Deadly. Stalks you relentlessly. Worth 500
+                      Points.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Scoring Tab -->
+            <div id="tab-scoring" class="tab-pane">
+              <div class="manual-section">
+                <h3>Combo System</h3>
+                <p>
+                  Move constantly to build your Combo Multiplier up to
+                  <strong>2.0x</strong>!
+                </p>
+                <div class="combo-tiers">
+                  <div class="tier">8 Steps: 1.05x</div>
+                  <div class="tier">15 Steps: 1.15x</div>
+                  <div class="tier">25 Steps: 1.3x</div>
+                  <div class="tier">40 Steps: 1.6x</div>
+                  <div class="tier">60 Steps: 2.0x</div>
+                </div>
+              </div>
+              <div class="manual-section">
+                <h3>Points</h3>
+                <ul class="manual-list">
+                  <li><strong>Gem:</strong> 75 pts</li>
+                  <li><strong>Zombie Kill:</strong> 100+ pts</li>
+                  <li><strong>Level Complete:</strong> 100+ pts</li>
+                  <li><strong>Wall Hit:</strong> -75 pts</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -949,7 +1189,7 @@
               >
             </div>
           </div>
-          <div class="settings-section">
+          <div class="settings-section data-management-card">
             <h3>
               <span class="material-icons-round">dataset</span> Data Management
             </h3>
@@ -1058,3 +1298,5 @@
     </div>
     <div id="toast-container"></div>
     <script type="module" src="/js/main.js"></script>
+  </body>
+</html>

@@ -76,11 +76,11 @@ export class CameraController {
     // Mode-specific settings
     this.modeSettings = {
       [CameraMode.CHASE]: {
-        height: 40, // High altitude for 2D view
-        distance: 0.1, // Almost perfectly top-down (0 would break LookAt)
-        speed: 0.5, // Very responsive
-        fov: 60, // Flatter field of view
-        lookAhead: 0, // No tilting - strict 2D feel
+        height: 25,
+        distance: 14, // Closer distance
+        speed: 0.5,
+        fov: 60,
+        lookAhead: 0,
       },
       [CameraMode.CINEMATIC]: {
         height: 18,
@@ -97,8 +97,8 @@ export class CameraController {
         lookAhead: 0,
       },
       [CameraMode.DYNAMIC]: {
-        height: 40,
-        distance: 0.1,
+        height: 25, // Match Chase
+        distance: 14, // Match Chase
         speed: 0.5,
         fov: 60,
         lookAhead: 0,
@@ -120,6 +120,11 @@ export class CameraController {
       inCombat: false,
       highCombo: false,
     };
+
+    // Maze size scaling parameters
+    this.baseSize = 15; // Base maze size for reference
+    this.currentMazeSize = 15; // Current maze size
+    this.mazeSizeRatio = 1.0; // Ratio for scaling (current / base)
   }
 
   /**
@@ -184,6 +189,74 @@ export class CameraController {
   }
 
   /**
+   * Update camera settings based on maze size
+   * Smart scaling: as maze grows, camera pulls back proportionally
+   * This maintains visual clarity while adapting to level difficulty
+   */
+  updateMazeSize(newMazeSize) {
+    this.currentMazeSize = newMazeSize;
+    this.mazeSizeRatio = newMazeSize / this.baseSize;
+
+    // SMART SCALING FORMULA
+    // Base: 15x15 maze = ratio 1.0 = base camera distance
+    // Larger mazes: ratio increases, camera pulls back smoothly
+    // Max scaling factor capped at 2.0 to prevent camera going too far back
+
+    const scaleFactor = Math.min(this.mazeSizeRatio, 2.0);
+
+    // Calculate scaled distance for all modes
+    const baseDistances = {
+      [CameraMode.CHASE]: 14,
+      [CameraMode.CINEMATIC]: 20,
+      [CameraMode.BIRDS_EYE]: 1,
+      [CameraMode.DYNAMIC]: 14,
+      [CameraMode.FIRST_PERSON]: 2,
+    };
+
+    const baseHeights = {
+      [CameraMode.CHASE]: 25,
+      [CameraMode.CINEMATIC]: 18,
+      [CameraMode.BIRDS_EYE]: 45,
+      [CameraMode.DYNAMIC]: 25,
+      [CameraMode.FIRST_PERSON]: 3,
+    };
+
+    const baseFOVs = {
+      [CameraMode.CHASE]: 60,
+      [CameraMode.CINEMATIC]: 60,
+      [CameraMode.BIRDS_EYE]: 70,
+      [CameraMode.DYNAMIC]: 60,
+      [CameraMode.FIRST_PERSON]: 85,
+    };
+
+    // Apply proportional scaling to distance and height
+    // Distance scales to show larger maze
+    // Height stays FIXED to prevent zoom-out feeling
+    // FOV increases slightly to maintain viewing angle consistency
+    for (const mode of Object.keys(baseDistances)) {
+      const baseDist = baseDistances[mode];
+      const baseHeight = baseHeights[mode];
+      const baseFOV = baseFOVs[mode];
+
+      // Scale distance: base + (scale - 1) * base * 0.5
+      // This gives smooth progression without drastic changes
+      this.modeSettings[mode].distance =
+        baseDist * (1 + (scaleFactor - 1) * 0.5);
+
+      // IMPORTANT: Height remains fixed - only distance scales
+      // This prevents the "zoom out" effect when leveling up
+      // The viewing angle stays consistent, only the player appears smaller (correct perception)
+      this.modeSettings[mode].height = baseHeight;
+
+      // Increase FOV proportionally with distance to maintain viewing consistency
+      // This compensates for the camera pulling further back
+      // FOV increases by ~10% at maximum scale to keep visual perception stable
+      this.modeSettings[mode].fov =
+        baseFOV * (1 + (scaleFactor - 1) * 0.08);
+    }
+  }
+
+  /**
    * Trigger camera shake
    */
   shake(intensity = 1.0, duration = 0.3) {
@@ -213,29 +286,32 @@ export class CameraController {
     let zoomFactor = 1.0;
     let speedMultiplier = 1.0;
 
+    // ALL DYNAMIC ADJUSTMENTS DISABLED FOR STABILITY
+    // The user prefers a steady, consistent camera without zooming/bobbing
+
     // Zoom out when near goal for dramatic effect
     if (this.eventState.nearGoal) {
-      heightOffset -= 3;
-      zoomFactor = 0.85;
-      speedMultiplier = 0.7;
+      // heightOffset -= 3;
+      // zoomFactor = 0.85;
+      // speedMultiplier = 0.7;
     }
 
     // Zoom in during combat
     if (this.eventState.isUnderAttack || this.eventState.inCombat) {
-      heightOffset -= 2;
-      zoomFactor = 1.15;
-      speedMultiplier = 1.3;
+      // heightOffset -= 2;
+      // zoomFactor = 1.15;
+      // speedMultiplier = 1.3;
     }
 
     // Pull back for overview on high combo
     if (this.eventState.highCombo) {
-      heightOffset += 2;
-      zoomFactor = 0.9;
+      // heightOffset += 2;
+      // zoomFactor = 0.9;
     }
 
     // Quick pulse on collecting items
     if (this.eventState.isCollecting) {
-      zoomFactor *= 0.95;
+      // zoomFactor *= 0.95;
     }
 
     return { heightOffset, zoomFactor, speedMultiplier };
@@ -338,6 +414,12 @@ export class CameraController {
     this.deltaTime = (now - this.lastTime) / 1000;
     this.lastTime = now;
 
+    // Check if player is moving
+    const playerVelocity = this.playerPosition
+      .clone()
+      .sub(this.lastPlayerPosition);
+    const isPlayerMoving = playerVelocity.lengthSq() > 0.001; // Lower threshold
+
     // Update shake
     this.updateShake(this.deltaTime);
 
@@ -351,19 +433,32 @@ export class CameraController {
       }
     }
 
-    // Get dynamic adjustments
+    // Get dynamic adjustments - DISABLE HEIGHT OFFSET IF MOVING to prevent bobbing
     const adjustments = this.getDynamicAdjustments();
     this.targetZoom = adjustments.zoomFactor;
-    this.targetHeight =
-      this.modeSettings[this.mode].height + adjustments.heightOffset;
+
+    // Only apply height offset if NOT moving to keep ground plane stable
+    const heightOffset = isPlayerMoving ? 0 : adjustments.heightOffset;
+    this.targetHeight = this.modeSettings[this.mode].height + heightOffset;
 
     // Smooth zoom transition
+    let speedMultiplier = adjustments.speedMultiplier;
+
+    // Get user-configured speed
+    let userSpeedMultiplier = 1.0;
+    if (this.gameData) {
+      const spd = this.gameData.getSetting("cameraSpeed") || 5;
+      userSpeedMultiplier = 0.5 + (spd - 1) * (1.5 / 9);
+    }
+
     this.currentZoom +=
-      (this.targetZoom - this.currentZoom) * 0.1 * adjustments.speedMultiplier;
+      (this.targetZoom - this.currentZoom) * 0.1 * speedMultiplier;
     this.currentHeight += (this.targetHeight - this.currentHeight) * 0.08;
 
     // Calculate target position based on mode
     let targetPos;
+
+    // Always use fluid chase logic for "Single Movie" feel
     switch (this.mode) {
       case CameraMode.CINEMATIC:
         targetPos = this.getCinematicPosition();
@@ -385,50 +480,53 @@ export class CameraController {
     const zoomedPos = targetPos.clone();
     zoomedPos.y *= this.currentZoom;
 
-    // Get user-configured speed from GameData
-    let userSpeedMultiplier = 1.0;
-    if (this.gameData) {
-      const spd = this.gameData.getSetting("cameraSpeed") || 5;
-      // Map 1-10 to 0.5x - 2.0x
-      userSpeedMultiplier = 0.5 + (spd - 1) * (1.5 / 9);
-    }
+    // CINEMATIC SMOOTHING ("Single Movie View")
+    // Instead of locking rigidly to player, we use gentle damping (lerp)
+    // This allows the player to move slightly within the frame while the camera glides behind.
+    // Damping factor: Lower = Smoother/Slower, Higher = Snappier
+    const damping = 0.1;
 
-    // Calculate smooth camera movement with momentum
+    // Smooth X/Z interpolation
+    const diffX = zoomedPos.x - this.camera.position.x;
+    const diffZ = zoomedPos.z - this.camera.position.z;
+
+    this.camera.position.x += diffX * damping;
+    this.camera.position.z += diffZ * damping;
+
+    // Apply Shake
+    this.camera.position.x += this.shakeOffset.x;
+    this.camera.position.z += this.shakeOffset.z;
+
+    // Height smoothing (separate for vertical dynamics)
     const speed =
       this.modeSettings[this.mode].speed *
-      adjustments.speedMultiplier *
+      speedMultiplier *
       userSpeedMultiplier *
       this.deltaTime *
       60;
-
-    // RIGID LOCK: X and Z axes are locked 1:1 to target (no smoothing)
-    // This prevents "view angle lag" where camera trails behind player movement.
-    // We only smooth Y (height) and Zoom.
-    this.camera.position.x = zoomedPos.x + this.shakeOffset.x;
-    this.camera.position.z = zoomedPos.z + this.shakeOffset.z;
-
-    // Smooth Y interpolation (Height)
-    const adaptiveSpeed = Math.min(speed, 0.5); // Cap smoothing speed
+    const adaptiveSpeed = Math.min(speed, 0.5);
     const diffY = zoomedPos.y - this.camera.position.y;
-    this.camera.position.y += diffY * adaptiveSpeed * 0.5; // Smoother height
-    this.camera.position.y += this.shakeOffset.y; // Add shake offset
+    this.camera.position.y += diffY * adaptiveSpeed * 0.5;
+    this.camera.position.y += this.shakeOffset.y;
 
-    // Calculate and apply look-at target
-    this.calculateLookAhead();
+    // STABILITY FIX: Force fixed rotation to prevent ground wobble
+    const quaternion = new THREE.Quaternion();
+    const euler = new THREE.Euler(-Math.PI / 3.5, 0, 0, "YXZ");
+    quaternion.setFromEuler(euler);
+    this.camera.quaternion.copy(quaternion);
 
+    // Manual sync
+    this.camera.rotation.x = -Math.PI / 3.5;
+    this.camera.rotation.y = 0;
+    this.camera.rotation.z = 0;
+
+    // We maintain the lookAt vector only for returning data to other systems
     const lookAtTarget = new THREE.Vector3(
-      this.playerPosition.x + this.lookAheadOffset.x * 0.5,
-      0.5, // Look at player torso level
-      this.playerPosition.z + this.lookAheadOffset.z * 0.5,
+      this.camera.position.x,
+      0,
+      this.camera.position.z - 10,
     );
-
-    // Lock LookAt X/Z instantly as well to match position
-    this.currentLookAt.x = lookAtTarget.x;
-    this.currentLookAt.z = lookAtTarget.z;
-    // Smooth LookAt Y only
-    this.currentLookAt.y += (lookAtTarget.y - this.currentLookAt.y) * 0.1;
-
-    this.camera.lookAt(this.currentLookAt);
+    this.currentLookAt.copy(lookAtTarget);
 
     return {
       position: this.camera.position.clone(),

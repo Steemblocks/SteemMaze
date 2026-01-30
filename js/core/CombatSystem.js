@@ -21,14 +21,19 @@ export class CombatSystem {
       const zombie = this.game.zombies[i];
       if (zombie.checkCollision(this.game.playerPos.x, this.game.playerPos.z)) {
         if (this.game.isPotionActive) {
-          // KILL ZOMBIE with explosion effect!
-          zombie.explode();
+          // KILL ZOMBIE with centralized explosion effect!
+          const position = zombie.mesh.position.clone();
+          this.game.createEntityExplosion(position, 40, 0x8b0000); // Increased from 15
+
+          // Disassemble zombie body parts for dramatic effect
+          const bodyParts = zombie.disassembleForExplosion(1.2);
+          this.game.explodingBodyParts.push(...bodyParts);
+
           zombie.dispose();
           this.game.zombies.splice(i, 1);
 
           // AUDIO: Explosion sound
-          if (this.game.audioManager)
-            this.game.audioManager.playExplosion();
+          if (this.game.audioManager) this.game.audioManager.playExplosion();
 
           // Reward coins (scales down with level)
           const reward = GameRules.getZombieKillReward(this.game.level);
@@ -71,14 +76,19 @@ export class CombatSystem {
       const dog = this.game.zombieDogs[i];
       if (dog.checkCollision(this.game.playerPos.x, this.game.playerPos.z)) {
         if (this.game.isPotionActive) {
-          // KILL DOG with explosion effect!
-          dog.explode();
+          // KILL DOG with centralized explosion effect!
+          const position = dog.mesh.position.clone();
+          this.game.createEntityExplosion(position, 30, 0x6b4423); // Increased from 12
+
+          // Disassemble dog body parts for dramatic effect
+          const bodyParts = dog.disassembleForExplosion(1.3);
+          this.game.explodingBodyParts.push(...bodyParts);
+
           dog.dispose();
           this.game.zombieDogs.splice(i, 1);
 
           // AUDIO: Explosion sound
-          if (this.game.audioManager)
-            this.game.audioManager.playExplosion();
+          if (this.game.audioManager) this.game.audioManager.playExplosion();
 
           // Reward coins (scales down with level)
           this.game.totalCoins += DOG_KILL_REWARD;
@@ -134,14 +144,22 @@ export class CombatSystem {
               ? "Bigfoot Boss"
               : "Boss";
 
-          // KILL BOSS with explosion effect!
-          boss.explode();
+          // KILL BOSS with centralized explosion effect!
+          const position = boss.mesh.position.clone();
+          const scale = boss.isHordeBoss ? 2.0 : 2.5; // Bigger for Bigfoot
+          this.game.createEntityExplosion(position, 80, 0x8b0000, scale);
+
+          // Disassemble boss (or spawn debris)
+          if (typeof boss.disassembleForExplosion === "function") {
+            const bodyParts = boss.disassembleForExplosion(2.0); // Higher force for bosses
+            this.game.explodingBodyParts.push(...bodyParts);
+          }
+
           boss.dispose();
           this.game.bossZombies.splice(i, 1);
 
           // AUDIO: Explosion sound
-          if (this.game.audioManager)
-            this.game.audioManager.playExplosion();
+          if (this.game.audioManager) this.game.audioManager.playExplosion();
 
           // Reward coins (scales with level)
           const bossReward = GameRules.getBossKillReward(this.game.level);
@@ -178,13 +196,19 @@ export class CombatSystem {
       const zombie = this.game.hordeZombies[i];
       if (zombie.checkCollision(this.game.playerPos.x, this.game.playerPos.z)) {
         if (this.game.isPotionActive) {
-          zombie.explode();
+          // KILL HORDE ZOMBIE with centralized explosion effect!
+          const position = zombie.mesh.position.clone();
+          this.game.createEntityExplosion(position, 40, 0x8b0000, 1.0); // Normal scale
+
+          // Disassemble
+          const bodyParts = zombie.disassembleForExplosion(1.2);
+          this.game.explodingBodyParts.push(...bodyParts);
+
           zombie.dispose();
           this.game.hordeZombies.splice(i, 1);
 
           // AUDIO: Explosion sound
-          if (this.game.audioManager)
-            this.game.audioManager.playExplosion();
+          if (this.game.audioManager) this.game.audioManager.playExplosion();
 
           // Lower reward for horde zombies (10 coins)
           this.game.totalCoins += this.game.HORDE_ZOMBIE_REWARD;
@@ -214,13 +238,19 @@ export class CombatSystem {
       const dog = this.game.hordeDogs[i];
       if (dog.checkCollision(this.game.playerPos.x, this.game.playerPos.z)) {
         if (this.game.isPotionActive) {
-          dog.explode();
+          // KILL HORDE DOG with centralized explosion effect!
+          const position = dog.mesh.position.clone();
+          this.game.createEntityExplosion(position, 30, 0x6b4423, 1.0); // Normal scale
+
+          // Disassemble
+          const bodyParts = dog.disassembleForExplosion(1.3);
+          this.game.explodingBodyParts.push(...bodyParts);
+
           dog.dispose();
           this.game.hordeDogs.splice(i, 1);
 
           // AUDIO: Explosion sound
-          if (this.game.audioManager)
-            this.game.audioManager.playExplosion();
+          if (this.game.audioManager) this.game.audioManager.playExplosion();
 
           // Lower reward for horde dogs (5 coins)
           this.game.totalCoins += this.game.HORDE_DOG_REWARD;
@@ -256,17 +286,28 @@ export class CombatSystem {
         monster.checkCollision(this.game.playerPos.x, this.game.playerPos.z)
       ) {
         if (this.game.isPotionActive) {
-          monster.explode();
-          // No need to splice if explode/dispose handles safety, but consistency:
+          // KILL MONSTER with centralized explosion effect!
+          const position = monster.mesh.position.clone();
+          this.game.createEntityExplosion(position, 50, 0x8b0000, 1.5); // 1.5x larger blast
+
+          // Disassemble
+          if (typeof monster.disassembleForExplosion === "function") {
+            const bodyParts = monster.disassembleForExplosion(1.5);
+            this.game.explodingBodyParts.push(...bodyParts);
+          }
+
+          monster.dispose();
           this.game.monsters.splice(i, 1);
 
-          if (this.game.audioManager)
-            this.game.audioManager.playExplosion();
+          if (this.game.audioManager) this.game.audioManager.playExplosion();
 
           this.game.totalCoins += 50; // Use static reward or rule
           this.game.scoringSystem.recordZombieKilled();
 
-          this.game.ui.showToast("Monster Banished! +50 Coins", "face_retouching_off");
+          this.game.ui.showToast(
+            "Monster Banished! +50 Coins",
+            "face_retouching_off",
+          );
 
           const coinEl = document.getElementById("coinsDisplay");
           if (coinEl) coinEl.textContent = this.game.totalCoins;

@@ -65,7 +65,7 @@ export class PostProcessingManager {
       0.9, // Bloom threshold (higher - only very bright things glow)
     );
     bloomPass.threshold = 0.85; // High threshold - only emissive objects glow
-    bloomPass.strength = 0.5; // Very subtle
+    bloomPass.strength = 0.8; // Increased from 0.5 for better pop
     bloomPass.radius = 0.3;
     this.bloomPass = bloomPass;
     this.composer.addPass(bloomPass);
@@ -130,128 +130,251 @@ export class PostProcessingManager {
  * Particle Trail System
  * Creates beautiful particle effects following the player
  */
+/**
+ * Particle Trail System (Optimized)
+ * Uses InstancedMesh for high-performance shared-frame rendering
+ * Supports large particle counts for high-quality blasts
+ */
 export class ParticleTrailSystem {
   constructor(scene, color = 0x4ade80) {
     this.scene = scene;
-    this.color = color;
-    this.particles = [];
-    this.maxParticles = 50;
+    this.color = new THREE.Color(color);
+    this.maxParticles = 500; // Increased limit for massive blasts
     this.trailEnabled = true;
+
+    // Instance data management
+    this.particleData = [];
+    this.dummy = new THREE.Object3D(); // Helper for matrix calculations
 
     this.createParticlePool();
   }
 
   createParticlePool() {
-    const geometry = new THREE.SphereGeometry(0.08, 8, 8);
+    // Shared geometry for all particles (optimized)
+    const geometry = new THREE.SphereGeometry(0.12, 8, 8);
+
+    // Shared material - using white base to allow instance coloring
+    // Note: InstancedMesh handles colors via setColorAt
     const material = new THREE.MeshBasicMaterial({
-      color: this.color,
+      color: 0xffffff,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.9,
     });
 
-    // Create particle pool
+    // Create the InstancedMesh
+    this.mesh = new THREE.InstancedMesh(geometry, material, this.maxParticles);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.scene.add(this.mesh);
+
+    // Initialize pool state
     for (let i = 0; i < this.maxParticles; i++) {
-      const particle = new THREE.Mesh(geometry.clone(), material.clone());
-      particle.visible = false;
-      particle.userData = {
+      this.particleData.push({
+        active: false,
         life: 0,
         maxLife: 60,
         velocity: new THREE.Vector3(),
-        active: false,
-      };
-      this.scene.add(particle);
-      this.particles.push(particle);
+        scale: 0,
+        position: new THREE.Vector3(),
+        color: new THREE.Color(),
+      });
+      // Send off-screen initially
+      this.mesh.setMatrixAt(i, new THREE.Matrix4().makeScale(0, 0, 0));
     }
+  }
+
+  // Find next available particle index
+  getNextFreeIndex() {
+    // Simple linear search or cyclic cursor could work.
+    // For 500 items, linear find is fast enough.
+    return this.particleData.findIndex((p) => !p.active);
   }
 
   emit(position, count = 3) {
     if (!this.trailEnabled) return;
 
     for (let i = 0; i < count; i++) {
-      const particle = this.particles.find((p) => !p.userData.active);
-      if (!particle) continue;
+      const idx = this.getNextFreeIndex();
+      if (idx === -1) break; // Pool full
 
-      particle.position.copy(position);
-      particle.position.x += (Math.random() - 0.5) * 0.3;
-      particle.position.y += Math.random() * 0.3;
-      particle.position.z += (Math.random() - 0.5) * 0.3;
+      const p = this.particleData[idx];
+      p.active = true;
+      p.life = p.maxLife;
 
-      particle.userData.velocity.set(
+      // Reset position
+      p.position.copy(position);
+      p.position.x += (Math.random() - 0.5) * 0.3;
+      p.position.y += Math.random() * 0.3;
+      p.position.z += (Math.random() - 0.5) * 0.3;
+
+      // Velocity
+      p.velocity.set(
         (Math.random() - 0.5) * 0.05,
         0.02 + Math.random() * 0.03,
         (Math.random() - 0.5) * 0.05,
       );
 
-      particle.userData.life = particle.userData.maxLife;
-      particle.userData.active = true;
-      particle.visible = true;
-      particle.scale.setScalar(1);
-      particle.material.opacity = 0.8;
+      // Visuals
+      p.scale = 1.0;
+      p.color.copy(this.color);
+
+      this.updateInstance(idx);
     }
+    this.mesh.count = this.maxParticles;
+    this.mesh.instanceMatrix.needsUpdate = true;
+    this.mesh.instanceColor.needsUpdate = true;
   }
 
   // Special burst effect for collecting items
-  burst(position, count = 15, color = null) {
+  burst(position, count = 25, color = null) {
     for (let i = 0; i < count; i++) {
-      const particle = this.particles.find((p) => !p.userData.active);
-      if (!particle) continue;
+      const idx = this.getNextFreeIndex();
+      if (idx === -1) break;
 
-      particle.position.copy(position);
+      const p = this.particleData[idx];
+      p.active = true;
+      p.life = p.maxLife * 1.5;
+
+      p.position.copy(position);
 
       const angle = (Math.PI * 2 * i) / count;
       const speed = 0.08 + Math.random() * 0.05;
-      particle.userData.velocity.set(
+      p.velocity.set(
         Math.cos(angle) * speed,
         0.05 + Math.random() * 0.08,
         Math.sin(angle) * speed,
       );
 
+      // Color
       if (color) {
-        particle.material.color.setHex(color);
+        p.color.setHex(color);
       } else {
-        particle.material.color.setHex(this.color);
+        p.color.copy(this.color);
       }
 
-      particle.userData.life = particle.userData.maxLife * 1.5;
-      particle.userData.active = true;
-      particle.visible = true;
-      particle.scale.setScalar(1.5);
-      particle.material.opacity = 1;
+      p.scale = 1.5;
+      this.updateInstance(idx);
     }
+    this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+  }
+
+  // Entity death explosion effect - shared by all entities
+  // High quality blast using shared frames
+  entityExplosion(
+    position,
+    count = 50,
+    color = 0x8b0000,
+    scaleMultiplier = 1.0,
+  ) {
+    for (let i = 0; i < count; i++) {
+      const idx = this.getNextFreeIndex();
+      if (idx === -1) break;
+
+      const p = this.particleData[idx];
+      p.active = true;
+      p.life = p.maxLife * 2.5;
+
+      // Position spread scales with entity size
+      const spread = 0.5 * scaleMultiplier;
+      p.position.copy(position);
+      p.position.y += (0.5 + Math.random() * 0.5) * scaleMultiplier; // Higher start for big bosses
+      p.position.x += (Math.random() - 0.5) * spread;
+      p.position.z += (Math.random() - 0.5) * spread;
+
+      // Random explosion velocity - aggressive spread
+      const angle = Math.random() * Math.PI * 2;
+      const elevation = Math.random() * Math.PI * 0.5;
+      // Velocity slightly faster for bigger explosions to cover more ground
+      const speed =
+        (0.2 + Math.random() * 0.3) * (1 + (scaleMultiplier - 1) * 0.3);
+
+      p.velocity.set(
+        Math.cos(angle) * Math.cos(elevation) * speed,
+        (0.2 + Math.random() * 0.4) * scaleMultiplier, // Higher upward force
+        Math.sin(angle) * Math.cos(elevation) * speed,
+      );
+
+      // Vary colors
+      const colorHex = color;
+      const colorVariations = [
+        colorHex,
+        (colorHex & 0xffffff) * 0.8,
+        (colorHex & 0xffffff) * 0.6,
+        0x4a4a4a,
+      ];
+      const selectedColor =
+        colorVariations[Math.floor(Math.random() * colorVariations.length)];
+      p.color.setHex(selectedColor);
+
+      // Scale particles larger for bigger entities (but not linearly, maybe sqrt)
+      // Base scale 2.0 -> Boss scale ~3.0-4.0
+      p.scale = (2.0 + Math.random() * 1.5) * (0.8 + 0.2 * scaleMultiplier);
+
+      this.updateInstance(idx);
+    }
+    this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+  }
+
+  updateInstance(index) {
+    const p = this.particleData[index];
+    this.dummy.position.copy(p.position);
+    this.dummy.scale.setScalar(p.scale);
+    this.dummy.updateMatrix();
+
+    this.mesh.setMatrixAt(index, this.dummy.matrix);
+    this.mesh.setColorAt(index, p.color);
   }
 
   update() {
-    this.particles.forEach((particle) => {
-      if (!particle.userData.active) return;
+    let needsUpdate = false;
 
-      particle.userData.life--;
-      if (particle.userData.life <= 0) {
-        particle.userData.active = false;
-        particle.visible = false;
-        return;
+    for (let i = 0; i < this.maxParticles; i++) {
+      const p = this.particleData[i];
+      if (!p.active) continue;
+
+      p.life--;
+      if (p.life <= 0) {
+        p.active = false;
+        p.scale = 0;
+        this.updateInstance(i);
+        needsUpdate = true;
+        continue;
       }
 
       // Update position
-      particle.position.add(particle.userData.velocity);
-      particle.userData.velocity.y -= 0.001; // Gravity
+      p.position.add(p.velocity);
+      p.velocity.y -= 0.012; // Stronger gravity for realism
 
-      // Fade out
-      const lifeRatio = particle.userData.life / particle.userData.maxLife;
-      particle.material.opacity = lifeRatio * 0.8;
-      particle.scale.setScalar(lifeRatio);
-    });
+      // Fade out by scaling
+      const lifeRatio = p.life / p.maxLife;
+      // p.scale scales down as it dies
+      // If it started at ~2.0, we want it to shrink
+      const originalScale = p.scale > 1.5 ? 2.5 : 1.0; // Estimate original scale hint
+      p.scale = lifeRatio * originalScale;
+
+      // Update this instance
+      this.dummy.position.copy(p.position);
+      this.dummy.scale.setScalar(p.scale);
+      this.dummy.updateMatrix();
+      this.mesh.setMatrixAt(i, this.dummy.matrix);
+
+      needsUpdate = true;
+    }
+
+    if (needsUpdate) {
+      this.mesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
   setColor(color) {
-    this.color = color;
+    this.color.setHex(color);
   }
 
   dispose() {
-    this.particles.forEach((p) => {
-      this.scene.remove(p);
-      p.geometry.dispose();
-      p.material.dispose();
-    });
+    this.scene.remove(this.mesh);
+    this.mesh.geometry.dispose();
+    this.mesh.material.dispose();
   }
 }
 
@@ -262,6 +385,20 @@ export class ParticleTrailSystem {
 export class SkyboxManager {
   constructor(scene) {
     this.scene = scene;
+
+    // Base colors
+    this.baseTopColor = new THREE.Color(0x0f172a); // Deep Navy
+    this.baseBottomColor = new THREE.Color(0x020617); // Darker base
+
+    // Storm colors
+    this.stormTopColor = new THREE.Color(0x050510); // Almost black/purple
+    this.stormBottomColor = new THREE.Color(0x000000); // Pitch black
+
+    this.currentTopColor = this.baseTopColor.clone();
+    this.currentBottomColor = this.baseBottomColor.clone();
+
+    this.stormIntensity = 0;
+
     this.createSkybox();
     this.createStars();
   }
@@ -272,8 +409,8 @@ export class SkyboxManager {
     const skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       uniforms: {
-        topColor: { value: new THREE.Color(0x0f172a) }, // Deep Navy
-        bottomColor: { value: new THREE.Color(0x020617) }, // Darker base
+        topColor: { value: this.baseTopColor },
+        bottomColor: { value: this.baseBottomColor },
         offset: { value: 33 },
         exponent: { value: 0.6 },
       },
@@ -300,6 +437,7 @@ export class SkyboxManager {
     });
 
     this.skyMesh = new THREE.Mesh(skyGeo, skyMat);
+    this.skyMat = skyMat; // Save reference for updates
     this.scene.add(this.skyMesh);
   }
 
@@ -362,10 +500,32 @@ export class SkyboxManager {
     this.scene.add(this.stars);
   }
 
+  setStormIntensity(intensity) {
+    this.stormIntensity = Math.min(1, Math.max(0, intensity));
+  }
+
   update() {
     // Slowly rotate stars
     if (this.stars) {
       this.stars.rotation.y += 0.00005;
+    }
+
+    // Update sky colors based on storm intensity
+    if (this.skyMat) {
+      // Interpolate towards target colors
+      const targetTop = this.baseTopColor
+        .clone()
+        .lerp(this.stormTopColor, this.stormIntensity);
+      const targetBottom = this.baseBottomColor
+        .clone()
+        .lerp(this.stormBottomColor, this.stormIntensity);
+
+      // Smooth transition (approx 5% per frame)
+      this.currentTopColor.lerp(targetTop, 0.05);
+      this.currentBottomColor.lerp(targetBottom, 0.05);
+
+      this.skyMat.uniforms.topColor.value.copy(this.currentTopColor);
+      this.skyMat.uniforms.bottomColor.value.copy(this.currentBottomColor);
     }
   }
 
@@ -427,6 +587,11 @@ export class ScreenEffectsManager {
     setTimeout(() => {
       this.flashOverlay.style.opacity = 0;
     }, duration);
+  }
+
+  // Backward compatibility alias
+  flashScreen(color, intensity, duration) {
+    this.flash(color, intensity, duration);
   }
 
   // Get camera offset for shake effect

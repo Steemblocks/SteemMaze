@@ -269,68 +269,75 @@ export class CollectibleManager {
         gem.userData.collected = true;
         this.game.scoringSystem.recordGemCollection();
 
-        // Particle burst effect at gem location
-        if (this.game.particleTrail) {
-          this.game.particleTrail.burst(gem.position, 20, 0xa855f7);
-        }
+        // Defer heavy UI operations to next frame to prevent frame hangs
+        const gemToAnimate = gem;
+        const gemPosition = gem.position.clone();
 
-        // Visual Feedback
-        this.game.showFloatingText(gem.position, "+1 Life", "#a855f7");
-
-        // Smooth collection animation - gem flies up and fades out
-        const startY = gem.position.y;
-        const startScale = gem.scale.x;
-        const startTime = Date.now();
+        // Start animation immediately
+        const startY = gemToAnimate.position.y;
+        const startScale = gemToAnimate.scale.x;
+        const startTime = performance.now();
         const duration = 300; // 300ms animation
 
-        const animateCollection = () => {
-          const elapsed = Date.now() - startTime;
+        const animateCollection = (currentTime) => {
+          const elapsed = currentTime - startTime;
           const progress = Math.min(elapsed / duration, 1);
 
           // Ease out curve
           const eased = 1 - Math.pow(1 - progress, 3);
 
           // Fly up and scale up slightly then shrink
-          gem.position.y = startY + eased * 2;
-          gem.rotation.y += 0.15; // Fast spin during collection
+          gemToAnimate.position.y = startY + eased * 2;
+          gemToAnimate.rotation.y += 0.15; // Fast spin during collection
 
           if (progress < 0.5) {
             // Scale up first half
-            gem.scale.setScalar(startScale * (1 + eased * 0.5));
+            gemToAnimate.scale.setScalar(startScale * (1 + eased * 0.5));
           } else {
             // Scale down second half
-            gem.scale.setScalar(startScale * (1.25 - (eased - 0.5) * 2.5));
+            gemToAnimate.scale.setScalar(startScale * (1.25 - (eased - 0.5) * 2.5));
           }
 
           if (progress < 1) {
             requestAnimationFrame(animateCollection);
           } else {
             // Remove after animation complete
-            this.game.scene.remove(gem);
+            this.game.scene.remove(gemToAnimate);
           }
         };
 
-        animateCollection();
+        requestAnimationFrame(animateCollection);
 
-        // Give player an extra life when collecting gem
-        this.game.addLife();
+        // Defer secondary effects to avoid frame spike
+        setTimeout(() => {
+          // Particle burst effect at gem location (happens after animation starts)
+          if (this.game.particleTrail) {
+            this.game.particleTrail.burst(gemPosition, 20, 0xa855f7);
+          }
 
-        // Show toast for gem with life bonus
-        this.game.ui.showToast(
-          `✨ Gem Collected! +1 Life (${this.game.gemsCollected}/${this.gems.length})`,
-          "favorite",
-        );
+          // Visual Feedback
+          this.game.showFloatingText(gemPosition, "+1 Life", "#a855f7");
 
-        // AUDIO: Play gem collect sound
-        if (this.game.audioManager)
-          this.game.audioManager.playGem();
+          // Give player an extra life when collecting gem
+          this.game.addLife();
 
-        // Vibration feedback
-        if (
-          this.game.gameData.getSetting("vibration") &&
-          navigator.vibrate
-        )
-          navigator.vibrate([10, 30, 10]);
+          // Show toast for gem with life bonus
+          this.game.ui.showToast(
+            `✨ Gem Collected! +1 Life (${this.game.gemsCollected}/${this.gems.length})`,
+            "favorite",
+          );
+
+          // AUDIO: Play gem collect sound (deferred to prevent blocking)
+          if (this.game.audioManager)
+            this.game.audioManager.playGem();
+
+          // Vibration feedback (deferred)
+          if (
+            this.game.gameData.getSetting("vibration") &&
+            navigator.vibrate
+          )
+            navigator.vibrate([10, 30, 10]);
+        }, 0); // Deferred to next available frame
       }
     });
   }
@@ -384,13 +391,14 @@ export class CollectibleManager {
         visualCoin.rotation.z = Math.PI / 2;
         this.game.scene.add(visualCoin);
 
-        // Animate the visual coin - fly up and fade out
+        // Defer animation start to next frame
+        const coinPosition = coinData.position.clone();
         const startY = visualCoin.position.y;
-        const startTime = Date.now();
+        const startTime = performance.now();
         const duration = 500; // 500ms animation
 
-        const animateVisualCoin = () => {
-          const elapsed = Date.now() - startTime;
+        const animateVisualCoin = (currentTime) => {
+          const elapsed = currentTime - startTime;
           const progress = Math.min(elapsed / duration, 1);
 
           // Ease out curve
@@ -411,42 +419,45 @@ export class CollectibleManager {
           }
         };
 
-        animateVisualCoin();
+        requestAnimationFrame(animateVisualCoin);
 
-        // Visual Feedback: Floating Text
-        this.game.showFloatingText(
-          coinData.position,
-          `+${GameRules.COIN_VALUE}`,
-          "#ffd700",
-        );
+        // Defer heavy UI operations to prevent frame hang
+        setTimeout(() => {
+          // Update Stats
+          this.game.totalCoins += GameRules.COIN_VALUE;
+          this.game.scoringSystem.recordCoinCollection();
 
-        // Update Stats immediately
-        this.game.totalCoins += GameRules.COIN_VALUE;
-        this.game.scoringSystem.recordCoinCollection();
+          // Visual Feedback: Floating Text
+          this.game.showFloatingText(
+            coinPosition,
+            `+${GameRules.COIN_VALUE}`,
+            "#ffd700",
+          );
 
-        // Update UI
-        const coinEl = document.getElementById("coinsDisplay");
-        if (coinEl) coinEl.textContent = this.game.totalCoins;
-        this.game.ui.showToast(
-          `+${GameRules.COIN_VALUE} Coins`,
-          "monetization_on",
-        );
+          // Update UI
+          const coinEl = document.getElementById("coinsDisplay");
+          if (coinEl) coinEl.textContent = this.game.totalCoins;
+          this.game.ui.showToast(
+            `+${GameRules.COIN_VALUE} Coins`,
+            "monetization_on",
+          );
 
-        // Particle effect
-        if (this.game.particleTrail) {
-          this.game.particleTrail.burst(coinData.position, 5, 0xffd700);
-        }
+          // Particle effect (deferred)
+          if (this.game.particleTrail) {
+            this.game.particleTrail.burst(coinPosition, 5, 0xffd700);
+          }
 
-        // AUDIO: Play coin sound
-        if (this.game.audioManager) this.game.audioManager.playCoin();
+          // AUDIO: Play coin sound (deferred)
+          if (this.game.audioManager) this.game.audioManager.playCoin();
 
-        // Vibration feedback
-        if (
-          this.game.gameData.getSetting("vibration") &&
-          navigator.vibrate
-        ) {
-          navigator.vibrate(GameRules.VIBRATION_COLLECT);
-        }
+          // Vibration feedback (deferred)
+          if (
+            this.game.gameData.getSetting("vibration") &&
+            navigator.vibrate
+          ) {
+            navigator.vibrate(GameRules.VIBRATION_COLLECT);
+          }
+        }, 0); // Deferred to next available frame
       }
     }
   }

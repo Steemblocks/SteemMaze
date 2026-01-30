@@ -339,97 +339,66 @@ export class Monster {
     return this.gridX === playerX && this.gridZ === playerZ;
   }
 
-  explode() {
-    if (!this.mesh) return;
+  /**
+   * Disassemble monster body parts for explosion effect
+   */
+  disassembleForExplosion(explosionForce = 1.0) {
+    if (!this.mesh || this.isDisposed) return [];
 
-    const position = this.mesh.position.clone();
+    const bodyParts = [];
+    const centerPos = this.mesh.position.clone();
+    centerPos.y += 1.5;
 
-    // Monster explosion - Red/Gore theme to match Zombies
-    const particleCount = 20;
-    const particles = [];
+    // Generate random chunks
+    const chunkCount = 8;
+    const chunkGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+    const chunkMat = new THREE.MeshStandardMaterial({
+      color: 0x550000,
+      roughness: 0.8,
+      metalness: 0.1,
+      transparent: true,
+      opacity: 1.0,
+    });
 
-    // Create shared geometry if not exists
-    if (!Monster.particleGeo) {
-      Monster.particleGeo = new THREE.SphereGeometry(0.12, 4, 4);
-    }
+    for (let i = 0; i < chunkCount; i++) {
+      const chunk = new THREE.Mesh(chunkGeo, chunkMat.clone());
 
-    const colors = [0x8b0000, 0x4a0000, 0x2d2d2d, 0x660000, 0x3d0000]; // Bloody Red Palette
+      chunk.position.copy(centerPos);
+      chunk.position.x += (Math.random() - 0.5) * 1.0;
+      chunk.position.y += (Math.random() - 0.5) * 1.5;
+      chunk.position.z += (Math.random() - 0.5) * 1.0;
 
-    for (let i = 0; i < particleCount; i++) {
-      const color = colors[Math.floor(Math.random() * colors.length)];
-      const mat = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 1.0,
-      });
-
-      const particle = new THREE.Mesh(Monster.particleGeo, mat);
-
-      // Start at monster center
-      particle.position.copy(position);
-      particle.position.y += 1.5; // Upper body
-
-      // Random velocity
-      particle.userData.velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * 0.6,
-        0.3 + Math.random() * 0.4,
-        (Math.random() - 0.5) * 0.6,
+      chunk.rotation.set(
+        Math.random() * Math.PI,
+        Math.random() * Math.PI,
+        Math.random() * Math.PI,
       );
 
-      particle.userData.gravity = -0.02;
-      particle.userData.life = 1.0;
-      particle.userData.decay = 0.02 + Math.random() * 0.02;
+      this.scene.add(chunk);
 
-      this.scene.add(particle);
-      particles.push(particle);
+      const direction = chunk.position.clone().sub(centerPos).normalize();
+      if (direction.lengthSq() === 0) direction.set(0, 1, 0);
+
+      const velocity = direction.multiplyScalar(0.4 * explosionForce);
+      velocity.y += 0.25 * explosionForce;
+
+      bodyParts.push({
+        mesh: chunk,
+        velocity: velocity,
+        life: 140,
+        maxLife: 140,
+      });
     }
 
-    // Flash effect
-    const flash = new THREE.PointLight(0xff0000, 3.0, 8);
-    flash.position.copy(position);
-    flash.position.y += 1.5;
-    this.scene.add(flash);
+    return bodyParts;
+  }
 
-    // Interactive Loop
-    let flashIntensity = 3.0;
-    const animateParticles = () => {
-      let activeCount = 0;
-
-      // Animate Flash
-      if (flashIntensity > 0) {
-        flashIntensity -= 0.3;
-        flash.intensity = Math.max(0, flashIntensity);
-      } else if (flash.parent) {
-        this.scene.remove(flash);
-      }
-
-      particles.forEach((p) => {
-        if (p.userData.life <= 0) return;
-
-        p.position.add(p.userData.velocity);
-        p.userData.velocity.y += p.userData.gravity;
-        p.userData.life -= p.userData.decay;
-
-        p.material.opacity = p.userData.life;
-        p.scale.setScalar(p.userData.life);
-
-        if (p.userData.life > 0) activeCount++;
-      });
-
-      if (activeCount > 0 || flashIntensity > 0) {
-        requestAnimationFrame(animateParticles);
-      } else {
-        particles.forEach((p) => {
-          this.scene.remove(p);
-          p.geometry.dispose();
-          p.material.dispose();
-        });
-        if (flash.parent) this.scene.remove(flash);
-      }
-    };
-    requestAnimationFrame(animateParticles);
-
-    this.dispose();
+  explode() {
+    // Particle effects are now handled by centralized Game.createEntityExplosion()
+    // called from CombatSystem. This method is kept for compatibility but
+    // no longer creates particles directly.
+    if (!this.mesh) return;
+    // All particle effects handled externally
   }
 
   dispose() {

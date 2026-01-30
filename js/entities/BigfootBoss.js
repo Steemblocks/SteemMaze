@@ -176,22 +176,54 @@ export class BigfootBoss {
   }
 
   addBossEffects() {
-    // 1. Red Eye Glow
+    // 1. Red Eye Glow with Sprites (Performance Optimization)
     // Guessing head position relative to scaled model height (approx 2units * 3.5 = 7 units high)
     const eyeHeight = 5.5;
 
-    const leftEye = new THREE.PointLight(0xff0000, 2, 8);
+    const eyeGlowTexture = this.createGlowTexture();
+    const eyeMaterial = new THREE.SpriteMaterial({
+      map: eyeGlowTexture,
+      color: 0xff0000,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      opacity: 0.9,
+      depthWrite: false,
+    });
+
+    // Left Eye
+    const leftEye = new THREE.Sprite(eyeMaterial.clone());
+    leftEye.scale.set(1.2, 1.2, 1.0);
     leftEye.position.set(-0.5, eyeHeight, 1.0);
     this.mesh.add(leftEye);
 
-    const rightEye = new THREE.PointLight(0xff0000, 2, 8);
+    // Right Eye
+    const rightEye = new THREE.Sprite(eyeMaterial);
+    rightEye.scale.set(1.2, 1.2, 1.0);
     rightEye.position.set(0.5, eyeHeight, 1.0);
     this.mesh.add(rightEye);
 
-    // 2. Ambient boss light (so he is never fully dark)
-    const auraLight = new THREE.PointLight(0xff4400, 1, 15);
-    auraLight.position.set(0, 4, 0);
-    this.mesh.add(auraLight);
+    // 2. Ambient boss light - Removed for performance
+    // Sprites are enough for "glowing eyes" look
+  }
+
+  createGlowTexture() {
+    // Simple cached texture generation helper
+    if (BigfootBoss.glowTexture) return BigfootBoss.glowTexture;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext("2d");
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, "rgba(255, 255, 255, 1)");
+    g.addColorStop(0.2, "rgba(255, 255, 255, 0.8)");
+    g.addColorStop(0.5, "rgba(128, 0, 0, 0.2)");
+    g.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+
+    BigfootBoss.glowTexture = new THREE.CanvasTexture(canvas);
+    return BigfootBoss.glowTexture;
   }
 
   // Calculates the target world position based on grid coordinates
@@ -441,94 +473,67 @@ export class BigfootBoss {
     return false;
   }
 
-  explode() {
-    // Reuse boss explosion visual
-    if (!this.mesh) return;
+  /**
+   * Disassemble boss body parts for explosion effect
+   * Generates generic "meat chunks" since we can't easily break the GLB model
+   */
+  disassembleForExplosion(explosionForce = 1.0) {
+    if (!this.mesh || this.isDisposed) return [];
 
-    const position = this.mesh.position.clone();
-    const particleCount = 40;
-    const particles = [];
-    const colors = [0x8b0000, 0x4a0000, 0x2d2d2d, 0x1a0000, 0x660000];
+    const bodyParts = [];
+    const centerPos = this.mesh.position.clone();
+    centerPos.y += 2.0; // Center of mass (approx)
 
-    const sharedGeo = new THREE.SphereGeometry(1, 6, 6);
+    // Generate random chunks
+    const chunkCount = 10;
+    const chunkGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    const chunkMat = new THREE.MeshStandardMaterial({
+      color: 0x550000, // Dark red flesh
+      roughness: 0.8,
+      metalness: 0.1,
+      transparent: true, // Allow fading
+      opacity: 1.0,
+    });
 
-    for (let i = 0; i < particleCount; i++) {
-      const size = 0.12 + Math.random() * 0.2;
-      const color = colors[Math.floor(Math.random() * colors.length)];
-      const mat = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 1.0,
-      });
+    for (let i = 0; i < chunkCount; i++) {
+      const chunk = new THREE.Mesh(chunkGeo, chunkMat.clone());
 
-      const particle = new THREE.Mesh(sharedGeo, mat);
-      particle.position.copy(position);
-      particle.position.y += 1.2 + Math.random() * 0.8;
+      // Random position around center
+      chunk.position.copy(centerPos);
+      chunk.position.x += (Math.random() - 0.5) * 1.5;
+      chunk.position.y += (Math.random() - 0.5) * 2.0;
+      chunk.position.z += (Math.random() - 0.5) * 1.5;
 
-      // Scale based on random size
-      particle.scale.setScalar(size);
-      particle.userData.initialScale = size;
-
-      particle.userData.velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * 0.6,
-        0.3 + Math.random() * 0.4,
-        (Math.random() - 0.5) * 0.6,
+      // Random rotation
+      chunk.rotation.set(
+        Math.random() * Math.PI,
+        Math.random() * Math.PI,
+        Math.random() * Math.PI,
       );
 
-      particle.userData.gravity = -0.012;
-      particle.userData.life = 1.0;
-      particle.userData.decay = 0.015 + Math.random() * 0.015;
+      this.scene.add(chunk);
 
-      this.scene.add(particle);
-      particles.push(particle);
+      // Calculate explosion velocity
+      const direction = chunk.position.clone().sub(centerPos).normalize();
+      // Failsafe for zero vector
+      if (direction.lengthSq() === 0) direction.set(0, 1, 0);
+
+      const velocity = direction.multiplyScalar(0.4 * explosionForce);
+      velocity.y += 0.3 * explosionForce; // Upward bias
+
+      bodyParts.push({
+        mesh: chunk,
+        velocity: velocity,
+        life: 150, // Longer life than blood
+        maxLife: 150,
+      });
     }
 
-    // Simple particle animation loop for explosion
-    const animateParticles = () => {
-      let activeCount = 0;
-      particles.forEach((p) => {
-        if (p.userData.life <= 0) return;
-        p.position.add(p.userData.velocity);
-        p.userData.velocity.y += p.userData.gravity;
-        p.userData.life -= p.userData.decay;
-        p.material.opacity = Math.max(0, p.userData.life);
+    return bodyParts;
+  }
 
-        // Scale relative to initial size
-        const scale = Math.max(0.1, p.userData.life) * p.userData.initialScale;
-        p.scale.setScalar(scale);
-
-        if (p.userData.life > 0) activeCount++;
-      });
-      if (activeCount > 0) {
-        requestAnimationFrame(animateParticles);
-      } else {
-        particles.forEach((p) => {
-          this.scene.remove(p);
-          // Only dispose material, geometry is shared
-          p.material.dispose();
-        });
-        // Dispose shared geometry once
-        sharedGeo.dispose();
-      }
-    };
-    animateParticles();
-
-    // Flash
-    const flash = new THREE.PointLight(0xff0000, 5, 12);
-    flash.position.copy(position);
-    flash.position.y += 1.5;
-    this.scene.add(flash);
-    let flashIntensity = 5;
-    const fadeFlash = () => {
-      flashIntensity -= 0.1;
-      if (flashIntensity > 0) {
-        flash.intensity = flashIntensity;
-        requestAnimationFrame(fadeFlash);
-      } else {
-        this.scene.remove(flash);
-      }
-    };
-    fadeFlash();
+  explode() {
+    // Particle effects are now handled by centralized Game.createEntityExplosion()
   }
 
   dispose() {
@@ -542,7 +547,11 @@ export class BigfootBoss {
 
       this.mesh.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
-        if (child.material) child.material.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material))
+            child.material.forEach((m) => m.dispose());
+          else child.material.dispose();
+        }
       });
       this.mesh = null;
     }

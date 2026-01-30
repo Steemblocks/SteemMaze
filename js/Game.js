@@ -18,6 +18,7 @@ import { CompassHUD } from "./ui/CompassHUD.js";
 import { ComboMeter } from "./ui/ComboMeter.js";
 import { GameRules } from "./core/GameRules.js";
 import { EnvironmentManager } from "./core/EnvironmentManager.js";
+import { CameraController, CameraMode } from "./core/CameraController.js";
 import { WorldGenerator } from "./core/WorldGenerator.js";
 import { EntityManager } from "./core/EntityManager.js";
 import { CollectibleManager } from "./core/CollectibleManager.js";
@@ -128,43 +129,46 @@ export class Game {
     this.weatherManager = null; // Rain and thunder effects for level 7+
     this.lastPlayerPos = { x: 0, z: 0 }; // For particle trails
 
+    // Exploding body parts tracking (for zombie potion blasts)
+    this.explodingBodyParts = []; // Array of {mesh, velocity, life, maxLife}
+
     // Initialize background first (before init())
     this.worldGenerator = new WorldGenerator(this);
     this.worldGenerator.initBackground();
-    
+
     // Initialize entity manager
     this.entityManager = new EntityManager(this);
-    
+
     // Initialize collectible manager
     this.collectibleManager = new CollectibleManager(this);
-    
+
     // Initialize combat system
     this.combatSystem = new CombatSystem(this);
-    
+
     // Initialize power-up system
     this.powerUpSystem = new PowerUpSystem(this);
-    
+
     // Initialize event system
     this.eventSystem = new EventSystem(this);
-    
+
     // Initialize scoring system
     this.scoringSystem = new ScoringSystem(this);
-    
+
     // Initialize game state manager
     this.gameStateManager = new GameStateManager(this);
-    
+
     // Initialize input manager
     this.inputManager = new InputManager(this);
-    
+
     // Initialize frame updater
     this.frameUpdater = new FrameUpdater(this);
-    
+
     // Initialize UI updater
     this.uiUpdater = new UIUpdater(this);
-    
+
     // Initialize collision handler
     this.collisionHandler = new CollisionHandler(this);
-    
+
     this.init();
     document.getElementById("levelDisplay").textContent = this.level;
   }
@@ -410,7 +414,11 @@ export class Game {
     this.comboMeter = new ComboMeter();
 
     // Weather system for level 7+ effects
-    this.weatherManager = new WeatherManager(this.scene, this.camera);
+    this.weatherManager = new WeatherManager(
+      this.scene,
+      this.camera,
+      this.skybox,
+    );
     this.weatherManager.setThunderCallback(() => {
       // Safety check: Only run effect if game is active AND on game screen
       if (
@@ -440,8 +448,9 @@ export class Game {
       this.weatherManager.stopStorm();
     };
 
-    // Camera Controller - DISABLED for stable 3rd person view
-    this.cameraController = null;
+    // Camera Controller - Enabled for advanced cinematic smooth tracking
+    // This manages all camera modes, smoothing, and stability
+    this.cameraController = new CameraController(this.camera, this.gameData);
   }
 
   applySettings() {
@@ -510,7 +519,11 @@ export class Game {
     if (!this.gameData.getSetting("fireflies")) {
       this.fireflies.forEach((f) => this.scene.remove(f));
       this.fireflies = [];
-    } else if (this.fireflies.length === 0 && this.scene && this.worldGenerator) {
+    } else if (
+      this.fireflies.length === 0 &&
+      this.scene &&
+      this.worldGenerator
+    ) {
       this.worldGenerator.createFireflies();
       this.fireflies = this.worldGenerator.fireflies;
     }
@@ -1281,6 +1294,65 @@ export class Game {
     return this.scoringSystem.calculateScore();
   }
 
+  /**
+   * Create centralized entity explosion effect
+   * Called by all entities when they die to ensure consistent particle effects
+   * Optimized to prevent frame drops during multiple explosions
+   * @param {THREE.Vector3} position - Position of explosion
+   * @param {number} particleCount - Number of particles
+   * @param {number} color - Hex color for particles
+   * @param {number} scaleMultiplier - Size scaling for boss effects (default 1.0)
+   */
+  createEntityExplosion(
+    position,
+    particleCount = 20,
+    color = 0x8b0000,
+    scaleMultiplier = 1.0,
+  ) {
+    // 1. Particle System (Instanced)
+    if (this.particleTrail) {
+      this.particleTrail.entityExplosion(
+        position,
+        particleCount,
+        color,
+        scaleMultiplier,
+      );
+    }
+
+    // 2. Initialize Shared Resources lazily
+    if (!this.activeExplosions) this.activeExplosions = [];
+    if (!this.explosionGlowGeometry) {
+      this.explosionGlowGeometry = new THREE.SphereGeometry(0.5, 16, 16);
+    }
+
+    // 3. Create Flash Light
+    const flash = new THREE.PointLight(color, 5, 15);
+    flash.position.copy(position);
+    flash.position.y += 1.0;
+    this.scene.add(flash);
+
+    // 4. Create Glow Mesh (Reusing Geometry)
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.8,
+      depthWrite: false, // Performance: Don't write depth for additive-like effects
+    });
+    const glowMesh = new THREE.Mesh(this.explosionGlowGeometry, glowMaterial);
+    glowMesh.position.copy(position);
+    glowMesh.position.y += 0.5;
+    this.scene.add(glowMesh);
+
+    // 5. Add to centralized update list (Handled by FrameUpdater)
+    this.activeExplosions.push({
+      flash: flash,
+      mesh: glowMesh,
+      flashIntensity: 5.0,
+      glowOpacity: 0.8,
+      glowScale: 1.0,
+    });
+  }
+
   async triggerVictory() {
     return this.scoringSystem.triggerVictory();
   }
@@ -1359,8 +1431,20 @@ export class Game {
     // Reset collision handler state
     this.collisionHandler.reset();
 
+    // CRITICAL: Reset camera to normal gameplay mode (was in cinematic during victory)
+    if (this.cameraController) {
+      this.cameraController.setMode(CameraMode.DYNAMIC);
+    }
+
     this.maze = this.generateMaze();
     this.buildMaze();
+
+    // UPDATE CAMERA FOR NEW MAZE SIZE
+    // Smart scaling: camera distance and height adjust proportionally to maze size
+    if (this.cameraController) {
+      this.cameraController.updateMazeSize(this.MAZE_SIZE);
+    }
+
     if (this.environment) {
       this.environment.generate(this.MAZE_SIZE, this.CELL_SIZE);
     }

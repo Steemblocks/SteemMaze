@@ -62,8 +62,8 @@ export class RainEffect {
     gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
 
     context.fillStyle = gradient;
-    // Draw a thin tapered streak in the center
-    context.fillRect(14, 0, 4, 256);
+    // Draw a tapered streak in the center - slightly wider
+    context.fillRect(13, 0, 6, 256);
 
     const texture = new THREE.CanvasTexture(canvas);
     return texture;
@@ -76,7 +76,7 @@ export class RainEffect {
 
   createMainRain() {
     this.rainVelocities = [];
-    this.rainCount = 4000; // Reduce count slightly for clarity
+    this.rainCount = 10000; // Increased from 4000 for heavier storm
 
     // Use Points for reliable visibility
     this.rainGeometry = new THREE.BufferGeometry();
@@ -107,7 +107,7 @@ export class RainEffect {
     // Rain material - Realistic scaling
     this.rainMaterial = new THREE.PointsMaterial({
       color: 0xaaddff,
-      size: 0.5, // 0.5 units tall (much smaller than 2.0)
+      size: 0.6, // Slight increase
       map: rainTexture,
       transparent: true,
       opacity: 0.6,
@@ -126,7 +126,7 @@ export class RainEffect {
 
   createBackdropRain() {
     this.backdropVelocities = [];
-    this.backdropCount = 2000;
+    this.backdropCount = 5000; // Increased from 2000
     const spreadX = 160;
     const spreadZ = 160;
     const heightMax = 70;

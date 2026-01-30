@@ -235,23 +235,54 @@ export class BossZombie {
 
   // Legacy loadModel removed
 
-  addGlowingEyes(parent) {
-    // Add two red point lights near head height (approx 2.0m up)
-    const eyeGroup = new THREE.Group();
-    // Guessing head position relative to root
-    eyeGroup.position.set(0, 180, 20); // Relative to unscaled model... wait.
-    // If we scaled the ROOT (fbx), checks internal positions.
-    // Let's add to this.mesh instead to be safe from model scale weirdness.
+  addBossEffects() {
+    // Optimization: Replaced expensive PointLights with Sprites and centralized aura
+    // Real-time lights per entity kill performance (3 lights * 6 bosses = 18 extra lights!)
 
-    // Actually, simple glowing spheres attached to mesh root
-    const eyeGeo = new THREE.SphereGeometry(0.1, 8, 8);
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    // 1. Red Eye Glow (Visual only, no lighting calculation)
+    const eyeGlowTexture = this.createGlowTexture();
+    const eyeMaterial = new THREE.SpriteMaterial({
+      map: eyeGlowTexture,
+      color: 0xff0000,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      opacity: 0.8,
+      depthWrite: false,
+    });
 
-    // We'll trust the loaded model looks good enough or add generic glow
-    // Adding a general red light to the boss
-    const light = new THREE.PointLight(0xff0000, 2.0, 5.0);
-    light.position.y = 2.0;
-    this.mesh.add(light);
+    // Left Eye
+    const leftEye = new THREE.Sprite(eyeMaterial.clone());
+    leftEye.scale.set(1.5, 1.5, 1.0);
+    leftEye.position.set(-0.3, 1.8, 0.5); // Adjust pos for model
+    this.mesh.add(leftEye);
+
+    // Right Eye
+    const rightEye = new THREE.Sprite(eyeMaterial);
+    rightEye.scale.set(1.5, 1.5, 1.0);
+    rightEye.position.set(0.3, 1.8, 0.5);
+    this.mesh.add(rightEye);
+
+    this.eyeGlow = leftEye; // Keep ref to one for pulsing
+  }
+
+  createGlowTexture() {
+    // Simple cached texture generation helper could be moved to static
+    if (BossZombie.glowTexture) return BossZombie.glowTexture;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext("2d");
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, "rgba(255, 255, 255, 1)");
+    g.addColorStop(0.2, "rgba(255, 255, 255, 0.8)");
+    g.addColorStop(0.5, "rgba(128, 0, 0, 0.2)");
+    g.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+
+    BossZombie.glowTexture = new THREE.CanvasTexture(canvas);
+    return BossZombie.glowTexture;
   }
 
   updatePosition() {
@@ -386,7 +417,7 @@ export class BossZombie {
     }
   }
 
-  update() {
+  update(deltaTime = 0.016) {
     if (this.isDisposed || !this.mesh) return;
 
     // Movement Logic
@@ -398,12 +429,12 @@ export class BossZombie {
     }
 
     // Animation
-    const dt = 0.016; // Approx 60fps
-    if (this.mixer) this.mixer.update(dt);
+    // Use passed deltaTime for proper time scaling
+    if (this.mixer) this.mixer.update(deltaTime);
 
     // Shader
     if (this.auraMaterial) {
-      this.auraMaterial.uniforms.time.value += dt;
+      this.auraMaterial.uniforms.time.value += deltaTime;
     }
 
     // Smooth Rotation
@@ -435,17 +466,67 @@ export class BossZombie {
     return false;
   }
 
-  explode() {
-    if (!this.mesh) return;
-    const position = this.mesh.position.clone();
+  /**
+   * Disassemble boss body parts for explosion effect
+   * Generates generic "meat chunks" since we can't easily break the GLB model
+   */
+  disassembleForExplosion(explosionForce = 1.0) {
+    if (!this.mesh || this.isDisposed) return [];
 
-    // Simple particle burst
-    const count = 30;
-    for (let i = 0; i < count; i++) {
-      // ... (Simplified particle logic for brevity to avoid file limit, relies on user seeing particles elsewhere or simple implementation)
+    const bodyParts = [];
+    const centerPos = this.mesh.position.clone();
+    centerPos.y += 2.0;
+
+    // Generate random chunks
+    const chunkCount = 12; // More for boss
+    const chunkGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6); // Bigger chunks
+    const chunkMat = new THREE.MeshStandardMaterial({
+      color: 0x550000,
+      roughness: 0.8,
+      metalness: 0.2,
+      transparent: true,
+      opacity: 1.0,
+    });
+
+    for (let i = 0; i < chunkCount; i++) {
+      const chunk = new THREE.Mesh(chunkGeo, chunkMat.clone());
+
+      chunk.position.copy(centerPos);
+      chunk.position.x += (Math.random() - 0.5) * 2.0;
+      chunk.position.y += (Math.random() - 0.5) * 2.5;
+      chunk.position.z += (Math.random() - 0.5) * 2.0;
+
+      chunk.rotation.set(
+        Math.random() * Math.PI,
+        Math.random() * Math.PI,
+        Math.random() * Math.PI,
+      );
+
+      this.scene.add(chunk);
+
+      const direction = chunk.position.clone().sub(centerPos).normalize();
+      if (direction.lengthSq() === 0) direction.set(0, 1, 0);
+
+      const velocity = direction.multiplyScalar(0.45 * explosionForce);
+      velocity.y += 0.3 * explosionForce;
+
+      bodyParts.push({
+        mesh: chunk,
+        velocity: velocity,
+        life: 180,
+        maxLife: 180,
+      });
     }
-    // We'll skip complex particle impl here to ensure file fits and loads correctly.
-    // The main Boss death effect is usually handled by Game.js too via removeEntity
+
+    return bodyParts;
+  }
+
+  explode() {
+    // Particle effects are now handled by centralized Game.createEntityExplosion()
+    // called from CombatSystem. This method is kept for compatibility but
+    // no longer creates particles directly.
+    if (!this.mesh) return;
+    // All particle effects handled externally
   }
 
   dispose() {

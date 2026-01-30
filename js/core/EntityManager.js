@@ -16,23 +16,23 @@ import { GameRules } from "./GameRules.js";
 export class EntityManager {
   constructor(game) {
     this.game = game; // Reference to parent Game instance
-    
+
     // Entity arrays
     this.player = null;
     this.playerMesh = null;
     this.playerPos = { x: 0, z: 0 };
-    
+
     this.zombies = [];
     this.zombieDogs = [];
     this.bossZombies = [];
     this.monsters = [];
     this.hordeZombies = [];
     this.hordeDogs = [];
-    
+
     // Spawn queue for staggered spawning
     this.spawnQueue = [];
     this.hordeSpawned = false;
-    
+
     // Tracking
     this.lastBigfootToast = null;
   }
@@ -318,10 +318,7 @@ export class EntityManager {
     this.game.cameraShake = 1.5;
 
     // Vibration feedback
-    if (
-      this.game.gameData.getSetting("vibration") &&
-      navigator.vibrate
-    ) {
+    if (this.game.gameData.getSetting("vibration") && navigator.vibrate) {
       navigator.vibrate([100, 50, 100, 50, 200]);
     }
 
@@ -630,69 +627,73 @@ export class EntityManager {
    * Update all entities each frame
    */
   updateEntities(smoothDelta) {
-    // Update player
+    // Increment frame counter for logic distribution
+    this.frameCounter = (this.frameCounter || 0) + 1;
+
+    // Update player (Always update)
     if (this.player) {
       this.player.update(smoothDelta);
     }
 
     // Update zombie AI (freeze if time freeze is active)
     if (!this.game.isTimeFreezeActive) {
-      this.zombies.forEach((zombie) => {
-        zombie.setPlayerPosition(
-          this.playerPos.x,
-          this.playerPos.z,
-          this.game.isLightBoostActive,
-        );
-        zombie.update(smoothDelta); // Pass delta time!
-      });
+      const px = this.playerPos.x;
+      const pz = this.playerPos.z;
+      const isBoost = this.game.isLightBoostActive;
 
-      this.zombieDogs.forEach((dog) => {
-        dog.setPlayerPosition(
-          this.playerPos.x,
-          this.playerPos.z,
-          this.game.isLightBoostActive,
-        );
-        dog.update(smoothDelta);
-      });
+      // Helper function for throttled updates
+      const updateEntityThrottled = (entity, index) => {
+        // Calculate Manhattan distance to player
+        const dist = Math.abs(entity.gridX - px) + Math.abs(entity.gridZ - pz);
+
+        let throttle = 1;
+        if (dist > 45)
+          throttle = 4; // Very far: 15fps logic
+        else if (dist > 25) throttle = 2; // Far: 30fps logic
+
+        // Distribute load based on index
+        if ((this.frameCounter + index) % throttle === 0) {
+          // Apply skipped time to timers so movement speed remains consistent
+          // Zombies/Dogs use moveCounter logic
+          if (entity.moveCounter !== undefined) {
+            entity.moveCounter += throttle - 1;
+          }
+          // Bosses/Monsters use moveTimer logic
+          if (entity.moveTimer !== undefined) {
+            entity.moveTimer += throttle - 1;
+          }
+
+          entity.setPlayerPosition(px, pz, isBoost);
+
+          // Pass accumulated time for smooth movement interpolation
+          entity.update(smoothDelta * throttle);
+        }
+      };
+
+      this.zombies.forEach(updateEntityThrottled);
+      this.zombieDogs.forEach(updateEntityThrottled);
 
       // === BOSS ZOMBIES (Always update if present) ===
-      this.bossZombies.forEach((boss) => {
-        boss.setPlayerPosition(
-          this.playerPos.x,
-          this.playerPos.z,
-          this.game.isLightBoostActive,
-        );
-        boss.update(smoothDelta);
+      this.bossZombies.forEach((boss, i) => {
+        // Bosses deserve higher priority, throttle less aggressively
+        // But logic is identical, maybe enforce throttle=1 for bosses nearby
+        const dist = Math.abs(boss.gridX - px) + Math.abs(boss.gridZ - pz);
+        let throttle = 1;
+        if (dist > 50) throttle = 2; // Only throttle if practically off-map
+
+        if ((this.frameCounter + i) % throttle === 0) {
+          if (boss.moveTimer !== undefined) boss.moveTimer += throttle - 1;
+          boss.setPlayerPosition(px, pz, isBoost);
+          boss.update(smoothDelta * throttle);
+        }
       });
 
       // === MONSTERS ===
-      this.monsters.forEach((m) => {
-        m.setPlayerPosition(
-          this.playerPos.x,
-          this.playerPos.z,
-          this.game.isLightBoostActive,
-        );
-        m.update(smoothDelta);
-      });
+      this.monsters.forEach(updateEntityThrottled);
 
       // === HORDE ENTITIES ===
-      this.hordeZombies.forEach((hz) => {
-        hz.setPlayerPosition(
-          this.playerPos.x,
-          this.playerPos.z,
-          this.game.isLightBoostActive,
-        );
-        hz.update(smoothDelta);
-      });
-
-      this.hordeDogs.forEach((hd) => {
-        hd.setPlayerPosition(
-          this.playerPos.x,
-          this.playerPos.z,
-          this.game.isLightBoostActive,
-        );
-        hd.update(smoothDelta);
-      });
+      this.hordeZombies.forEach(updateEntityThrottled);
+      this.hordeDogs.forEach(updateEntityThrottled);
     }
 
     // Clean up dead entities

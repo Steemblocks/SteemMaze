@@ -722,137 +722,78 @@ export class Zombie {
 
   /**
    * Create explosion effect when zombie is purified
-   */
-  /**
-   * Create explosion effect when zombie is purified
+   * Particle effects handled by centralized Game.createEntityExplosion()
    */
   explode() {
+    // Particle effects are now handled by centralized Game.createEntityExplosion()
+    // called from CombatSystem. This method is kept for compatibility but
+    // no longer creates particles directly.
     if (!this.mesh) return;
-
-    const position = this.mesh.position.clone();
-
-    // OPTIMIZATION: Reduce particle count for performance
-    const particleCount = 12; // Was 25
-    const particles = [];
-
-    // Reuse shared geometry from assets
-    const assets = Zombie.getAssets();
-    // If eyeGeo is too small (0.04), we might want a slightly bigger one,
-    // or just scale the mesh up. scaling is cheap.
-    const sharedGeo = assets.eyeGeo;
-
-    // Colors for gore/explosion effect
-    const colors = [0x8b0000, 0x4a5d4a, 0x2d2d2d, 0x660000, 0x3d4d3d];
-
-    for (let i = 0; i < particleCount; i++) {
-      // Random color from gore palette
-      const color = colors[Math.floor(Math.random() * colors.length)];
-
-      // We need unique material for opacity fading, unfortunately.
-      // But creating a simple BasicMaterial is cheap.
-      const mat = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 1.0,
-      });
-
-      const particle = new THREE.Mesh(sharedGeo, mat);
-
-      // Start at zombie position
-      particle.position.copy(position);
-      particle.position.y += 0.8 + Math.random() * 0.5;
-
-      // Random scale to vary size (instead of unique geometry)
-      // Base scale: 4.0 to 8.0 times the eyeGeo (0.04 radius) -> 0.16 to 0.32 radius
-      const initialScale = 4.0 + Math.random() * 4.0;
-      particle.scale.setScalar(initialScale);
-      particle.userData.initialScale = initialScale;
-
-      // Random velocity - exploding outward
-      particle.userData.velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * 0.4,
-        0.2 + Math.random() * 0.3,
-        (Math.random() - 0.5) * 0.4,
-      );
-
-      particle.userData.gravity = -0.015;
-      particle.userData.life = 1.0;
-      particle.userData.decay = 0.015 + Math.random() * 0.02; // Slower decay for visibility
-
-      this.scene.add(particle);
-      particles.push(particle);
-    }
-
-    // Animate particles
-    const animateParticles = () => {
-      let activeCount = 0;
-
-      particles.forEach((p) => {
-        if (p.userData.life <= 0) return;
-
-        // Apply velocity
-        p.position.add(p.userData.velocity);
-
-        // Apply gravity
-        p.userData.velocity.y += p.userData.gravity;
-
-        // Decay life and opacity
-        p.userData.life -= p.userData.decay;
-        p.material.opacity = Math.max(0, p.userData.life);
-
-        // Shrink as it fades - use initialScale reference
-        if (p.userData.initialScale) {
-          const currentScale = Math.max(
-            0.1,
-            p.userData.initialScale * p.userData.life,
-          );
-          p.scale.setScalar(currentScale);
-        }
-
-        if (p.userData.life > 0) {
-          activeCount++;
-        }
-      });
-
-      if (activeCount > 0) {
-        requestAnimationFrame(animateParticles);
-      } else {
-        // Cleanup particles
-        particles.forEach((p) => {
-          this.scene.remove(p);
-          // Do NOT dispose sharedGeo!
-          p.material.dispose();
-        });
-      }
-    };
-
-    // Start animation
-    requestAnimationFrame(animateParticles);
-
-    // Add a quick flash at explosion point
-    // OPTIMIZATION: Reduced duration and range
-    const flash = new THREE.PointLight(0xff0000, 2, 5);
-    flash.position.copy(position);
-    flash.position.y += 1;
-    this.scene.add(flash);
-
-    // Fade out flash
-    let flashIntensity = 2;
-    const fadeFlash = () => {
-      flashIntensity -= 0.2; // Faster fade
-      if (flashIntensity > 0) {
-        flash.intensity = flashIntensity;
-        requestAnimationFrame(fadeFlash);
-      } else {
-        this.scene.remove(flash);
-      }
-    };
-    requestAnimationFrame(fadeFlash);
+    // All particle effects handled externally
   }
 
   /**
-   * Remove zombie from scene and clean up resources
+   * Disassemble zombie body parts and scatter them on explosion
+   * Detaches body parts and applies velocity for dramatic effect
    */
+  disassembleForExplosion(explosionForce = 1.0) {
+    if (!this.mesh || this.isDisposed) return [];
+
+    const bodyParts = [];
+    const centerPos = this.mesh.position.clone();
+
+    // List of body parts to detach
+    const partNames = [
+      "head",
+      "torso",
+      "leftLegPivot",
+      "rightLegPivot",
+      "leftArmPivot",
+      "rightArmPivot",
+    ];
+
+    // Get each part and detach it
+    for (const partName of partNames) {
+      const part = this.mesh.getObjectByName(partName);
+      if (!part) continue;
+
+      // Convert to world position before detaching
+      const worldPos = new THREE.Vector3();
+      part.getWorldPosition(worldPos);
+
+      // Clone the part to keep it in the scene
+      const detachedPart = part.clone();
+      detachedPart.position.copy(worldPos);
+      detachedPart.quaternion.copy(
+        part.getWorldQuaternion(new THREE.Quaternion()),
+      );
+
+      // Clone materials to ensure we don't fade out other zombies
+      detachedPart.traverse((child) => {
+        if (child.isMesh && child.material) {
+          child.material = child.material.clone();
+          child.material.transparent = true;
+        }
+      });
+
+      this.scene.add(detachedPart);
+
+      // Calculate explosion direction (outward from center)
+      const direction = worldPos.clone().sub(centerPos).normalize();
+      const velocity = direction.multiplyScalar(0.3 * explosionForce);
+      velocity.y += 0.2 * explosionForce; // Upward force
+
+      bodyParts.push({
+        mesh: detachedPart,
+        velocity: velocity,
+        life: 120, // ~2 seconds at 60fps
+        maxLife: 120,
+      });
+    }
+
+    return bodyParts;
+  }
+
   /**
    * Remove zombie from scene and clean up resources
    */

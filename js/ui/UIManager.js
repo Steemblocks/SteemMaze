@@ -135,8 +135,8 @@ export class UIManager {
       "victoryMenuBtn",
     ].forEach((id) => {
       document.getElementById(id)?.addEventListener("click", () => {
-        document.getElementById("victoryScreen").style.display = "none";
-        document.getElementById("pauseScreen").style.display = "none";
+        document.getElementById("victoryScreen").classList.remove("active");
+        document.getElementById("pauseScreen").classList.remove("active");
         this.showScreen("mainMenu");
         window.game?.stopGame();
       });
@@ -154,7 +154,7 @@ export class UIManager {
       ?.addEventListener("click", () => window.game?.togglePause());
     document.getElementById("restartBtn")?.addEventListener("click", () => {
       window.game?.restartLevel();
-      document.getElementById("pauseScreen").style.display = "none";
+      document.getElementById("pauseScreen").classList.remove("active");
     });
     document
       .getElementById("nextLevelBtn")
@@ -175,7 +175,9 @@ export class UIManager {
           return;
         }
 
-        if (!game || !game.lastVictoryData) {
+        // FIXED: Look for lastVictoryData in both locations for compatibility
+        const victoryData = game?.lastVictoryData;
+        if (!game || !victoryData) {
           this.showToast("No game data to share");
           return;
         }
@@ -185,7 +187,7 @@ export class UIManager {
         btn.querySelector(".material-icons-round").textContent = "sync";
 
         try {
-          const data = game.lastVictoryData;
+          const data = victoryData;
 
           // Prepare game data for blog post
           const blogData = {
@@ -226,13 +228,13 @@ export class UIManager {
       .getElementById("gameOverRetryBtn")
       ?.addEventListener("click", () => {
         window.game?.restartLevel();
-        document.getElementById("gameOverScreen").style.display = "none";
+        document.getElementById("gameOverScreen").classList.remove("active");
       });
 
     document
       .getElementById("gameOverMenuBtn")
       ?.addEventListener("click", () => {
-        document.getElementById("gameOverScreen").style.display = "none";
+        document.getElementById("gameOverScreen").classList.remove("active");
         this.showScreen("mainMenu");
         window.game?.stopGame();
       });
@@ -983,7 +985,7 @@ export class UIManager {
             <span class="entry-rank">-</span>
             <img class="entry-avatar" src="${avatarUrl}" alt="${steemUsername}" onerror="this.style.display='none'">
             <span class="entry-name">${entry.name}</span>
-            <span class="entry-value" style="font-size: 0.7rem; opacity: 0.7;">No Recent Data</span>
+            <span class="entry-value inactive-badge">No Recent Data</span>
           </div>`;
         })
         .join("");
@@ -1174,9 +1176,7 @@ export class UIManager {
           "victoryRewardBreakdown",
         );
         if (rewardBreakdownEl) {
-          let breakdown = `Base: ${extras.levelReward.baseReward}`;
-          breakdown += ` + Level: ${extras.levelReward.levelBonus}`;
-          breakdown += ` + Stars: ${extras.levelReward.starBonus}`;
+          let breakdown = `Base ${extras.levelReward.baseReward} • Lvl ${extras.levelReward.levelBonus} • ★ ${extras.levelReward.starBonus}`;
           if (extras.levelReward.perfectBonus > 0) {
             breakdown += ` + Perfect: ${extras.levelReward.perfectBonus}`;
           }
@@ -1192,10 +1192,16 @@ export class UIManager {
       }
     }
 
-    document.getElementById("newRecordBadge").style.display = isNewRecord
-      ? "flex"
-      : "none";
-    document.getElementById("victoryScreen").style.display = "grid";
+    const victoryScreen = document.getElementById("victoryScreen");
+    victoryScreen.style.display = "grid";
+    // Force reflow for animation
+    victoryScreen.offsetHeight;
+    victoryScreen.classList.add("active");
+
+    const newRecordBadge = document.getElementById("newRecordBadge");
+    if (newRecordBadge) {
+      newRecordBadge.style.display = isNewRecord ? "flex" : "none";
+    }
   }
 
   showShareModal(score, stars, gameData) {

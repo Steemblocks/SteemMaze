@@ -1,7 +1,4 @@
-/**
- * ComboMeter - Visual combo streak indicator
- * Shows consecutive moves without hitting walls, with score multiplier
- */
+import { GameRules } from "../core/GameRules.js";
 
 export class ComboMeter {
   constructor() {
@@ -10,10 +7,12 @@ export class ComboMeter {
     this.comboBar = null;
     this.multiplierLabel = null;
     this.currentCombo = 0;
-    this.maxCombo = 10; // Combo cap for max multiplier
+    this.maxCombo = 60; // GameRules.LEGENDARY threshold
 
     this.createMeter();
   }
+
+  // ... (createMeter and injectStyles remain mostly same, just updating getMultiplier) ...
 
   createMeter() {
     this.container = document.createElement("div");
@@ -21,7 +20,7 @@ export class ComboMeter {
     this.container.innerHTML = `
       <div class="combo-header">
         <span class="combo-label">COMBO</span>
-        <span class="combo-multiplier">×1</span>
+        <span class="combo-multiplier">×1.0</span>
       </div>
       <div class="combo-bar-container">
         <div class="combo-bar-fill"></div>
@@ -167,11 +166,12 @@ export class ComboMeter {
         transform: scale(1.2);
       }
 
-      /* Tier colors */
-      .combo-tier-1 .combo-multiplier { color: #4ade80; }
-      .combo-tier-2 .combo-multiplier { color: #22d3ee; }
-      .combo-tier-3 .combo-multiplier { color: #a855f7; }
-      .combo-tier-4 .combo-multiplier { color: #fbbf24; }
+      /* Tier colors from GameRules */
+      .combo-tier-MINOR .combo-multiplier { color: #4ade80; }
+      .combo-tier-MODERATE .combo-multiplier { color: #fbbf24; }
+      .combo-tier-MAJOR .combo-multiplier { color: #f97316; }
+      .combo-tier-SUPER .combo-multiplier { color: #ef4444; }
+      .combo-tier-LEGENDARY .combo-multiplier { color: #a855f7; }
 
       @media (max-width: 768px) {
         #comboMeter {
@@ -204,46 +204,53 @@ export class ComboMeter {
     }
 
     // Update bar
+    // Scale bar based on next milestone or fixed cap
     const percent = Math.min((value / this.maxCombo) * 100, 100);
     if (this.comboBar) {
       this.comboBar.style.width = `${percent}%`;
     }
 
-    // Update multiplier
-    const multiplier = this.getMultiplier(value);
+    // Update multiplier using GameRules
+    const multiplier = GameRules.getComboMultiplier(value);
     if (this.multiplierLabel) {
-      this.multiplierLabel.textContent = `×${multiplier}`;
+      this.multiplierLabel.textContent = `×${multiplier.toFixed(2)}`;
     }
 
     // Show/hide based on combo
     if (value > 0) {
       this.container.classList.add("visible", "active");
     } else {
-      this.container.classList.remove("visible", "active", "max");
+      this.container.classList.remove(
+        "visible",
+        "active",
+        "max",
+        "combo-tier-MINOR",
+        "combo-tier-MODERATE",
+        "combo-tier-MAJOR",
+        "combo-tier-SUPER",
+        "combo-tier-LEGENDARY",
+      );
     }
 
     // Max combo effect
-    if (value >= this.maxCombo) {
+    if (value >= GameRules.COMBO_THRESHOLDS.LEGENDARY) {
       this.container.classList.add("max");
     } else {
       this.container.classList.remove("max");
     }
 
     // Tier colors
+    const tier = GameRules.getComboTier(value);
+    // clean old classes
     this.container.classList.remove(
-      "combo-tier-1",
-      "combo-tier-2",
-      "combo-tier-3",
-      "combo-tier-4"
+      "combo-tier-MINOR",
+      "combo-tier-MODERATE",
+      "combo-tier-MAJOR",
+      "combo-tier-SUPER",
+      "combo-tier-LEGENDARY",
     );
-    if (value >= 8) {
-      this.container.classList.add("combo-tier-4");
-    } else if (value >= 5) {
-      this.container.classList.add("combo-tier-3");
-    } else if (value >= 3) {
-      this.container.classList.add("combo-tier-2");
-    } else if (value > 0) {
-      this.container.classList.add("combo-tier-1");
+    if (tier) {
+      this.container.classList.add(`combo-tier-${tier}`);
     }
 
     // Bump animation
@@ -254,12 +261,8 @@ export class ComboMeter {
   }
 
   getMultiplier(combo) {
-    if (combo >= 10) return 2.0;
-    if (combo >= 8) return 1.8;
-    if (combo >= 6) return 1.5;
-    if (combo >= 4) return 1.3;
-    if (combo >= 2) return 1.1;
-    return 1.0;
+    // Deprecated: Uses GameRules now
+    return GameRules.getComboMultiplier(combo);
   }
 
   reset() {

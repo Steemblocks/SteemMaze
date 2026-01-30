@@ -15,11 +15,12 @@
  * - animation-cache.js       - Animation optimization
  */
 
-import "../style.css";
+import "../styles/main.css";
 import { GameData } from "./core/GameData.js";
 import { UIManager } from "./ui/UIManager.js";
 import { Game } from "./Game.js";
 import { Shop } from "./ui/Shop.js";
+import { Manual } from "./ui/Manual.js";
 
 // ============================================
 // INITIALIZE APPLICATION
@@ -41,6 +42,9 @@ window.ui = uiManager;
 const shop = new Shop(window.game);
 shop.init();
 window.game.shop = shop; // Expose shop to game if needed
+
+// Initialize Manual
+const manual = new Manual();
 
 // ============================================
 // PRELOADER

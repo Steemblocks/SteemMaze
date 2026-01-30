@@ -8,9 +8,10 @@ import { RainEffect } from "./RainEffect.js";
 import { ThunderEffect } from "./ThunderEffect.js";
 
 export class WeatherManager {
-  constructor(scene, camera) {
+  constructor(scene, camera, skybox = null) {
     this.scene = scene;
     this.camera = camera;
+    this.skybox = skybox;
 
     // Weather state
     this.isStormActive = false;
@@ -30,6 +31,11 @@ export class WeatherManager {
     this.isStormActive = true;
     this.stormIntensity = intensity;
 
+    // Update Skybox
+    if (this.skybox) {
+      this.skybox.setStormIntensity(intensity);
+    }
+
     // Start both effects
     this.rainEffect.start(intensity);
     this.thunderEffect.start(intensity);
@@ -43,6 +49,11 @@ export class WeatherManager {
 
     this.isStormActive = false;
     this.stormIntensity = 0;
+
+    // Reset Skybox
+    if (this.skybox) {
+      this.skybox.setStormIntensity(0);
+    }
 
     // Stop both effects
     this.rainEffect.stop();

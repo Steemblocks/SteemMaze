@@ -193,10 +193,10 @@ export class UIUpdater {
 
     // Hide screens
     const victoryScreen = document.getElementById("victoryScreen");
-    if (victoryScreen) victoryScreen.style.display = "none";
+    if (victoryScreen) victoryScreen.classList.remove("active");
 
     const gameOverScreen = document.getElementById("gameOverScreen");
-    if (gameOverScreen) gameOverScreen.style.display = "none";
+    if (gameOverScreen) gameOverScreen.classList.remove("active");
   }
 
   /**
@@ -261,7 +261,11 @@ export class UIUpdater {
    */
   updateTimeDisplay(seconds) {
     const timeEl = document.getElementById("time");
-    if (timeEl && this.game.ui && typeof this.game.ui.formatTime === "function") {
+    if (
+      timeEl &&
+      this.game.ui &&
+      typeof this.game.ui.formatTime === "function"
+    ) {
       timeEl.textContent = this.game.ui.formatTime(seconds);
     }
   }

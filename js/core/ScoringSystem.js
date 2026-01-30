@@ -62,13 +62,22 @@ export class ScoringSystem {
    */
   updateCombo() {
     // === INTELLIGENT COMBO SYSTEM ===
+    // Simplified: "Flow" system. Keep moving to build combo!
     const now = Date.now();
     const timeSinceLastMove = now - this.lastMoveTime;
 
-    // Calculate distance to goal (goal is at 0,0)
-    const currentDistance = this.game.playerPos.x + this.game.playerPos.z;
-    const isMovingForward = currentDistance < this.previousDistance;
-    const isMovingBackward = currentDistance > this.previousDistance;
+    // Check if player actually moved significantly
+    const movedMinDistance =
+      Math.abs(this.game.playerPos.x - this.lastPlayerPos?.x) > 0.1 ||
+      Math.abs(this.game.playerPos.z - this.lastPlayerPos?.z) > 0.1;
+
+    // We store lastPlayerPos here for next frame reference if needed,
+    // but ScoringSystem doesn't seem to track 'lastPlayerPos' natively in constructor.
+    // simpler check: compare current distance to previous distance strictly for 'change'
+    // but the previous code used currentDistance (x+z) which is flawed.
+
+    // Better Logic: logic is called by Game.js only when player *moves*.
+    // So we assume valid move interaction has occurred.
 
     // Clear any pending decay timer
     if (this.comboDecayTimer) {
@@ -76,64 +85,67 @@ export class ScoringSystem {
       this.comboDecayTimer = null;
     }
 
-    // Combo logic based on direction and timing
-    if (isMovingForward) {
-      // Moving TOWARD goal
-      if (this.canBuildCombo && timeSinceLastMove <= 2000) {
-        // Fast forward movement - build combo!
-        this.combo++;
-        if (this.combo > this.maxCombo) this.maxCombo = this.combo;
-      } else if (timeSinceLastMove > 2000 && timeSinceLastMove <= 3000) {
-        // Slow movement - no combo change, but don't decrease
-      } else {
-        // First move or after long pause - start fresh
-        this.combo = Math.max(1, this.combo);
-        this.canBuildCombo = true;
+    if (this.canBuildCombo && timeSinceLastMove <= 2000) {
+      // Fast movement (flow) - build combo!
+      this.combo++;
+      if (this.combo > this.maxCombo) this.maxCombo = this.combo;
+
+      // Visual feedback for combo build
+      if (this.game.comboMeter) this.game.comboMeter.setCombo(this.combo);
+    } else {
+      // Too slow - combo doesn't increment, but doesn't break immediately
+      // It will decay via timer if they stop completely.
+      // Or if it's the first move:
+      if (this.combo === 0) {
+        this.combo = 1;
+        if (this.game.comboMeter) this.game.comboMeter.setCombo(this.combo);
       }
-    } else if (isMovingBackward) {
-      // Moving AWAY from goal - decrease combo
-      this.combo = Math.max(0, this.combo - 1);
     }
-    // Staying same distance = no combo change
 
     // Update tracking
     this.lastMoveTime = now;
-    this.previousDistance = currentDistance;
 
     // Set up combo decay timer (3 seconds of no movement = decay starts)
     this.comboDecayTimer = setTimeout(() => {
       if (this.combo > 0) {
-        this.combo = Math.max(0, this.combo - 1);
+        // Decay rapidly if stopped
+        this.combo = Math.max(0, Math.floor(this.combo * 0.5)); // Lose half combo
         if (this.game.comboMeter) this.game.comboMeter.setCombo(this.combo);
 
-        // After decay, 1 second cooldown before combo can build again
+        // After decay, short cooldown
         this.canBuildCombo = false;
         setTimeout(() => {
           this.canBuildCombo = true;
-        }, 1000);
+        }, 500);
       }
-    }, 3000);
+    }, 2500); // 2.5s tolerance
 
     // RULE: Check combo bonus via GameRules
+    // Legacy check for small bonuses
     const bonus = GameRules.checkComboBonus(this.combo);
     if (bonus > 0) {
       this.extraScore = (this.extraScore || 0) + bonus;
 
-      // Visual feedback every 5 combos
-      if (this.combo % 5 === 0 && this.game.ui) {
-        this.game.ui.showToast(`Combo x${this.combo}! +${bonus} Points`, "star");
+      // Visual feedback every 10 combos or specific milestones
+      if (this.combo % 10 === 0 && this.game.ui) {
+        this.game.ui.showToast(
+          `Combo x${this.combo}! +${bonus} Pts`,
+          "star",
+          "combo_bonus",
+        );
       }
+    }
+
+    // Check for major tier milestones (visuals)
+    const tierCheck = GameRules.checkComboMilestone(this.combo - 1, this.combo);
+    if (tierCheck) {
+      this.onComboMilestone(tierCheck);
     }
 
     // Update score display in real-time
     const currentScore = this.calculateScore();
     const scoreEl = document.getElementById("scoreDisplay");
     if (scoreEl) scoreEl.textContent = currentScore;
-
-    // Update combo meter
-    if (this.game.comboMeter) {
-      this.game.comboMeter.setCombo(this.combo);
-    }
   }
 
   /**
@@ -165,7 +177,11 @@ export class ScoringSystem {
         SUPER: "#a855f7",
         LEGENDARY: "#06b6d4",
       };
-      this.game.screenEffects.flashScreen(colors[milestone.tier], 200);
+      // Only flash for Major milestones (25+ combo) to avoid visual noise
+      if (["MAJOR", "SUPER", "LEGENDARY"].includes(milestone.tier)) {
+        // Temporarily disabled to debug user report of persistent flashing
+        // this.game.screenEffects.flash(colors[milestone.tier], 0.5, 300);
+      }
     }
 
     // Camera shake for major milestones
@@ -273,11 +289,11 @@ export class ScoringSystem {
 
     // Delay showing game over screen to let death animation play
     setTimeout(() => {
-      document.getElementById("gameOverScreen").style.display = "grid";
+      const gameOverScreen = document.getElementById("gameOverScreen");
+      gameOverScreen.classList.add("active");
       document.getElementById("gameOverMoves").textContent = this.game.moves;
-      document.getElementById("gameOverTime").textContent = this.game.ui.formatTime(
-        this.game.time,
-      );
+      document.getElementById("gameOverTime").textContent =
+        this.game.ui.formatTime(this.game.time);
       document.getElementById("gameOverLevel").textContent = this.game.level;
     }, 500);
   }
@@ -383,7 +399,9 @@ export class ScoringSystem {
     };
 
     // Store for share button (blog post)
-    this.lastVictoryData = victoryData;
+    // CRITICAL: Store in game object so UIManager can access it
+    // UIManager looks for this at game.lastVictoryData, not scoringSystem.lastVictoryData
+    this.game.lastVictoryData = victoryData;
 
     this.game.ui.showVictory(
       this.game.moves,

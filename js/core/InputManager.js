@@ -141,7 +141,8 @@ export class InputManager {
     this.game.updateCameraEvents();
 
     // Win check
-    if (this.game.playerPos.x === 0 && this.game.playerPos.z === 0) this.game.triggerVictory();
+    if (this.game.playerPos.x === 0 && this.game.playerPos.z === 0)
+      this.game.triggerVictory();
   }
 
   /**
@@ -150,9 +151,18 @@ export class InputManager {
   togglePause() {
     if (this.game.won) return;
     this.game.isPaused = !this.game.isPaused;
-    document.getElementById("pauseScreen").style.display = this.game.isPaused
-      ? "grid"
-      : "none";
+    const pauseScreen = document.getElementById("pauseScreen");
+    if (this.game.isPaused) {
+      pauseScreen.style.display = "grid";
+      // Force reflow
+      pauseScreen.offsetHeight;
+      pauseScreen.classList.add("active");
+    } else {
+      pauseScreen.classList.remove("active");
+      setTimeout(() => {
+        if (!this.game.isPaused) pauseScreen.style.display = "";
+      }, 300); // Wait for transition
+    }
   }
 
   /**
@@ -196,9 +206,13 @@ export class InputManager {
 
     // Update background camera/renderer via worldGenerator
     if (this.game.worldGenerator) {
-      this.game.worldGenerator.bgCamera.aspect = window.innerWidth / window.innerHeight;
+      this.game.worldGenerator.bgCamera.aspect =
+        window.innerWidth / window.innerHeight;
       this.game.worldGenerator.bgCamera.updateProjectionMatrix();
-      this.game.worldGenerator.bgRenderer.setSize(window.innerWidth, window.innerHeight);
+      this.game.worldGenerator.bgRenderer.setSize(
+        window.innerWidth,
+        window.innerHeight,
+      );
     }
 
     // Resize post-processing
@@ -252,7 +266,8 @@ export class InputManager {
     document.querySelectorAll(".control-btn").forEach((btn) => {
       const handleInput = (e) => {
         e.preventDefault(); // Prevent double-firing on some devices
-        if (this.game.ui.currentScreen !== "gameScreen" || this.game.isPaused) return;
+        if (this.game.ui.currentScreen !== "gameScreen" || this.game.isPaused)
+          return;
 
         const dir = btn.dataset.dir;
         if (dir === "up") this.movePlayer(0, -1);
@@ -262,7 +277,10 @@ export class InputManager {
       };
 
       // Store handlers for cleanup
-      this._mobileHandlers.set(btn, { touchstart: handleInput, mousedown: handleInput });
+      this._mobileHandlers.set(btn, {
+        touchstart: handleInput,
+        mousedown: handleInput,
+      });
 
       // Add both touch and click for responsiveness
       btn.addEventListener("touchstart", handleInput, { passive: false });

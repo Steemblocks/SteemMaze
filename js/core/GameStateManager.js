@@ -103,11 +103,25 @@ export class GameStateManager {
     // Clear share modal and advance to next level
     this.game.ui.hideShareModal();
 
-    // Then advance to next level
+    // Hide pause and victory screens
+    document.getElementById("victoryScreen").classList.remove("active");
+    document.getElementById("pauseScreen").classList.remove("active");
+
+    // Advance to next level
     this.level++;
     this.game.gameData.set("currentLevel", this.level);
+    
+    // CRITICAL: Sync Game.level with GameStateManager.level
+    // These are separate properties and must stay in sync
+    this.game.level = this.level;
+    
+    // CRITICAL: Ensure game is not paused
+    this.game.isPaused = false;
+    
+    // Update UI display
     document.getElementById("levelDisplay").textContent = this.level;
-    document.getElementById("victoryScreen").style.display = "none";
+    
+    // Now resetGame() will use the correct new level
     this.game.resetGame();
   }
 
@@ -115,7 +129,16 @@ export class GameStateManager {
    * Replay current level without advancing
    */
   replayLevel() {
-    document.getElementById("victoryScreen").style.display = "none";
+    // Hide pause and victory screens
+    document.getElementById("victoryScreen").classList.remove("active");
+    document.getElementById("pauseScreen").classList.remove("active");
+    
+    // CRITICAL: Reset game state completely
+    this.game.won = false;
+    this.game.isRunning = false;
+    this.game.isPaused = false;
+    
+    // Reset the game with same level
     this.game.resetGame();
   }
 

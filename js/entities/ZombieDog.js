@@ -529,123 +529,74 @@ export class ZombieDog {
    * Explosion effect when killed - matches zombie explosion
    */
   explode() {
+    // Particle effects are now handled by centralized Game.createEntityExplosion()
+    // called from CombatSystem. This method is kept for compatibility but
+    // no longer creates particles directly.
     if (!this.mesh) return;
+    // All particle effects handled externally
+  }
 
-    const position = this.mesh.position.clone();
+  /**
+   * Disassemble dog body parts and scatter them on explosion
+   */
+  disassembleForExplosion(explosionForce = 1.0) {
+    if (!this.mesh || this.isDisposed) return [];
 
-    // OPTIMIZATION: Reduced particle count
-    const particleCount = 10; // Was 20
-    const particles = [];
+    const bodyParts = [];
+    const centerPos = this.mesh.position.clone();
 
-    // Reuse shared geometry from assets (optimized)
-    const assets = ZombieDog.getAssets();
-    const sharedGeo = assets.eyeGeo;
+    // List of dog body parts to detach
+    // List of dog body parts to detach
+    const partNames = [
+      "head",
+      "body",
+      "frontLeftLegPivot",
+      "frontRightLegPivot",
+      "backLeftLegPivot",
+      "backRightLegPivot",
+      "tailPivot",
+    ];
 
-    // Colors for gore/explosion effect - dog colors
-    const colors = [0x660000, 0x3d3d2d, 0x2d2d2d, 0x550000, 0x4a4a3a];
+    // Get each part and detach it
+    for (const partName of partNames) {
+      const part = this.mesh.getObjectByName(partName);
+      if (!part) continue;
 
-    for (let i = 0; i < particleCount; i++) {
-      // Random color from gore palette
-      const color = colors[Math.floor(Math.random() * colors.length)];
+      // Convert to world position before detaching
+      const worldPos = new THREE.Vector3();
+      part.getWorldPosition(worldPos);
 
-      // Basic cheap material
-      const mat = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 1.0,
-      });
-
-      const particle = new THREE.Mesh(sharedGeo, mat);
-
-      // Start at dog position
-      particle.position.copy(position);
-      particle.position.y += 0.5 + Math.random() * 0.3;
-
-      // Random scale (large chunks)
-      const initialScale = 3.0 + Math.random() * 3.0;
-      particle.scale.setScalar(initialScale);
-      particle.userData.initialScale = initialScale;
-
-      // Random velocity - exploding outward
-      particle.userData.velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * 0.35,
-        0.15 + Math.random() * 0.25,
-        (Math.random() - 0.5) * 0.35,
+      // Clone the part to keep it in the scene
+      const detachedPart = part.clone();
+      detachedPart.position.copy(worldPos);
+      detachedPart.quaternion.copy(
+        part.getWorldQuaternion(new THREE.Quaternion()),
       );
 
-      particle.userData.gravity = -0.012;
-      particle.userData.life = 1.0;
-      particle.userData.decay = 0.02 + Math.random() * 0.02; // Slower decay
-
-      this.scene.add(particle);
-      particles.push(particle);
-    }
-
-    // Animate particles
-    const animateParticles = () => {
-      let activeCount = 0;
-
-      particles.forEach((p) => {
-        if (p.userData.life <= 0) return;
-
-        // Apply velocity
-        p.position.add(p.userData.velocity);
-
-        // Apply gravity
-        p.userData.velocity.y += p.userData.gravity;
-
-        // Decay life and opacity
-        p.userData.life -= p.userData.decay;
-        p.material.opacity = Math.max(0, p.userData.life);
-
-        // Shrink as it fades
-        if (p.userData.initialScale) {
-          const currentScale = Math.max(
-            0.1,
-            p.userData.initialScale * p.userData.life,
-          );
-          p.scale.setScalar(currentScale);
-        }
-
-        if (p.userData.life > 0) {
-          activeCount++;
+      // Clone materials to ensure we don't fade out other dogs
+      detachedPart.traverse((child) => {
+        if (child.isMesh && child.material) {
+          child.material = child.material.clone();
+          child.material.transparent = true;
         }
       });
 
-      if (activeCount > 0) {
-        requestAnimationFrame(animateParticles);
-      } else {
-        // Cleanup particles
-        particles.forEach((p) => {
-          this.scene.remove(p);
-          // Do NOT dispose sharedGeo
-          p.material.dispose();
-        });
-      }
-    };
+      this.scene.add(detachedPart);
 
-    // Start animation
-    requestAnimationFrame(animateParticles);
+      // Calculate explosion direction (outward from center)
+      const direction = worldPos.clone().sub(centerPos).normalize();
+      const velocity = direction.multiplyScalar(0.35 * explosionForce); // Dogs fly faster
+      velocity.y += 0.25 * explosionForce;
 
-    // Add a quick flash at explosion point (orange-red for dog)
-    // OPTIMIZATION: Reduced light
-    const flash = new THREE.PointLight(0xff4400, 2.0, 4);
-    flash.position.copy(position);
-    flash.position.y += 0.6;
-    this.scene.add(flash);
+      bodyParts.push({
+        mesh: detachedPart,
+        velocity: velocity,
+        life: 120,
+        maxLife: 120,
+      });
+    }
 
-    // Fade out flash
-    let flashIntensity = 2.0;
-    const fadeFlash = () => {
-      flashIntensity -= 0.2;
-      if (flashIntensity > 0) {
-        flash.intensity = flashIntensity;
-        requestAnimationFrame(fadeFlash);
-      } else {
-        this.scene.remove(flash);
-      }
-    };
-    requestAnimationFrame(fadeFlash);
+    return bodyParts;
   }
 
   /**
