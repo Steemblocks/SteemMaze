@@ -2,6 +2,9 @@
 
 SteemMaze is a web-based 3D maze exploration game integrated with the Steem blockchain. Players navigate through procedurally generated mazes, avoid enemies, collect gems, and can save their progress and achievements directly to the Steem blockchain.
 
+<img width="1365" height="632" alt="image" src="https://github.com/user-attachments/assets/42ce5c11-6929-4c84-92cd-9ac60d715b2a" />
+
+
 ## Features
 
 - **3D Gameplay**: Immersive 3D environment built with Three.js, featuring dynamic lighting, fog, and procedurally generated terrain.
