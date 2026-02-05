@@ -5,7 +5,7 @@
  */
 
 import * as THREE from "three";
-import { steemIntegration } from "../steem-integration.js";
+import { steemIntegration } from "./steem/index.js";
 import { animationCache } from "../animation-cache.js";
 import {
   PostProcessingManager,
@@ -184,18 +184,15 @@ export class Game {
   }
 
   get MAZE_SIZE() {
-    // 1. Check for manual override from Settings UI
-    // If user sets a custom size in Settings ("Maze Size 15, 20, 25..."), use it as BASE for level scaling
-    const settingsBase = this.gameData.getSetting("mazeSize");
+    // 1. Strict Rules: Level 1 = 8x8, increasing by 1 per level.
+    // We ignore the user setting "mazeSize" base to enforce the 8-10 progression rule.
+    const baseSize = 8;
 
     // 2. Combine with level progression
-    const calculatedSize = GameRules.getMazeSize(
-      this.level,
-      settingsBase || 15,
-    );
+    const calculatedSize = GameRules.getMazeSize(this.level, baseSize);
 
-    // 3. Clamp for safety (min 10x10, max 60x60 for performance)
-    return Math.max(10, Math.min(60, calculatedSize));
+    // 3. Clamp for safety (min 8x8, max 60x60)
+    return Math.max(8, Math.min(60, calculatedSize));
   }
 
   // ===== INPUT STATE GETTERS (delegate to InputManager) =====
@@ -628,14 +625,41 @@ export class Game {
   }
 
   buildMaze() {
-    this.scene.children = this.scene.children.filter(
-      (c) =>
-        c === this.worldGenerator.ground ||
-        c.type === "AmbientLight" ||
-        c.type === "DirectionalLight" ||
-        c.type === "PointLight" ||
-        this.fireflies.includes(c),
-    );
+    // CRITICAL FIX: Properly dispose geometries and materials before removing from scene
+    // Prevent memory leaks by not just filtering - actually clean up Three.js resources
+    const toKeep = new Set([
+      this.worldGenerator.ground,
+      ...this.scene.children.filter(
+        (c) =>
+          c.type === "AmbientLight" ||
+          c.type === "DirectionalLight" ||
+          c.type === "PointLight",
+      ),
+      ...this.fireflies,
+    ]);
+
+    // Dispose removed objects to prevent memory leaks
+    this.scene.children.slice().forEach((child) => {
+      if (!toKeep.has(child)) {
+        this.scene.remove(child);
+
+        // Dispose geometries and materials (except for instanced meshes which are handled specially)
+        if (!child.isInstancedMesh) {
+          child.traverse((c) => {
+            if (c.geometry) {
+              c.geometry.dispose();
+            }
+            if (c.material) {
+              if (Array.isArray(c.material)) {
+                c.material.forEach((m) => m.dispose?.());
+              } else {
+                c.material.dispose?.();
+              }
+            }
+          });
+        }
+      }
+    });
 
     // Optimized Instanced Rendering for Walls (Massive FPS Boost)
     const wallCountEstimation = this.MAZE_SIZE * this.MAZE_SIZE * 4;
@@ -1422,6 +1446,11 @@ export class Game {
     // Reset input state
     this.inputManager.reset();
 
+    // CRITICAL FIX: Re-attach InputManager event listeners
+    // Without this, UI buttons (pause, shop, etc.) won't work after nextLevel()
+    // because dispose() removes all listeners and they must be re-attached
+    this.inputManager.setupEventListeners();
+
     // Reset frame updater state
     this.frameUpdater.reset();
 
@@ -1431,19 +1460,29 @@ export class Game {
     // Reset collision handler state
     this.collisionHandler.reset();
 
-    // CRITICAL: Reset camera to normal gameplay mode (was in cinematic during victory)
-    if (this.cameraController) {
-      this.cameraController.setMode(CameraMode.DYNAMIC);
-    }
+    // CRITICAL: Clear all entities (prevent ghost hordes/projectiles)
+    this.entityManager.dispose();
 
-    this.maze = this.generateMaze();
-    this.buildMaze();
+    // Reset shop state - CRITICAL: Clears active power-up timeouts
+    // Must be done before camera reset to ensure clean state
+    if (this.shop && typeof this.shop.reset === "function") {
+      this.shop.reset();
+    }
 
     // UPDATE CAMERA FOR NEW MAZE SIZE
     // Smart scaling: camera distance and height adjust proportionally to maze size
     if (this.cameraController) {
       this.cameraController.updateMazeSize(this.MAZE_SIZE);
     }
+
+    // CRITICAL: Reset camera to normal gameplay mode (was in cinematic during victory)
+    // Use instant = true to immediately apply settings and avoid transition issues
+    if (this.cameraController) {
+      this.cameraController.setMode(CameraMode.DYNAMIC, true);
+    }
+
+    this.maze = this.generateMaze();
+    this.buildMaze();
 
     if (this.environment) {
       this.environment.generate(this.MAZE_SIZE, this.CELL_SIZE);
@@ -1586,9 +1625,41 @@ export class Game {
       this.collisionHandler.dispose();
     }
 
-    // NOTE: Do NOT dispose InputManager - it needs to remain active for keyboard/mouse input!
-    // The input listeners should persist across game resets to avoid losing keyboard control
-    // If we need to clear input state, use inputManager.reset() instead
+    // CRITICAL FIX: Dispose world generator (mountains, ground, fireflies)
+    if (this.worldGenerator) {
+      this.worldGenerator.dispose();
+    }
+
+    // Dispose environment manager (rocks, clouds)
+    if (this.environment) {
+      this.environment.clear();
+    }
+
+    // Dispose weather effects
+    if (this.weatherManager) {
+      this.weatherManager.dispose();
+    }
+
+    // Dispose post-processing effects
+    if (this.postProcessing) {
+      this.postProcessing.dispose();
+    }
+
+    // Dispose HUD elements
+    if (this.compassHUD) {
+      this.compassHUD.dispose();
+    }
+
+    if (this.comboMeter) {
+      this.comboMeter.dispose();
+    }
+
+    // CRITICAL FIX: Dispose InputManager to reset the _listenersAttached flag
+    // This allows setupEventListeners() to re-attach fresh listeners on the next level
+    // Without this, the flag remains true and listeners never get re-attached
+    if (this.inputManager) {
+      this.inputManager.dispose();
+    }
 
     // 3. Reset Game State/Effects
 

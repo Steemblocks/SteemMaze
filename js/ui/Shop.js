@@ -22,6 +22,9 @@ export class Shop {
   }
 
   reset() {
+    // Close shop sidebar to prevent overlay blocking input
+    this.toggle(false);
+
     if (this.lightBoostTimeout) {
       clearTimeout(this.lightBoostTimeout);
       this.lightBoostTimeout = null;

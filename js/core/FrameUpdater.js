@@ -6,7 +6,7 @@
 
 import { animationCache } from "../../animation-cache.js";
 import { BigfootBoss } from "../entities/BigfootBoss.js";
-import { steemIntegration } from "../../steem-integration.js";
+import { steemIntegration } from "../steem/index.js";
 import * as THREE from "three";
 
 export class FrameUpdater {
@@ -170,48 +170,52 @@ export class FrameUpdater {
     }
 
     // === SPAWN QUEUE PROCESSING (Staggered Spawning) ===
-    this.game.entityManager.processSpawnQueue();
+    if (!this.game.won && !this.game.isPaused) {
+      this.game.entityManager.processSpawnQueue();
 
-    // === GAME LOGIC UPDATES ===
-    // Decrement invincibility frames
-    if (this.game.invincibilityFrames > 0) {
-      this.game.invincibilityFrames--;
+      // === GAME LOGIC UPDATES ===
+      // Decrement invincibility frames
+      if (this.game.invincibilityFrames > 0) {
+        this.game.invincibilityFrames--;
 
-      // Blink player exactly 3 times at the START of invincibility
-      // Only blink during the first 36 frames (3 blinks at 12 frames each)
-      if (this.game.playerMesh) {
-        const blinkPeriod = 12; // frames per blink cycle (on/off)
-        const blinkDuration = 36; // total frames for 3 blinks
-        const framesFromStart =
-          (this.game.invincibilityFrames > 120 ? 90 : 120) -
-          this.game.invincibilityFrames;
+        // Blink player exactly 3 times at the START of invincibility
+        // Only blink during the first 36 frames (3 blinks at 12 frames each)
+        if (this.game.playerMesh) {
+          const blinkPeriod = 12; // frames per blink cycle (on/off)
+          const blinkDuration = 36; // total frames for 3 blinks
+          const framesFromStart =
+            (this.game.invincibilityFrames > 120 ? 90 : 120) -
+            this.game.invincibilityFrames;
 
-        if (framesFromStart < blinkDuration) {
-          // During blink phase: toggle visibility every blinkPeriod/2 frames
-          this.game.playerMesh.visible =
-            Math.floor(framesFromStart / (blinkPeriod / 2)) % 2 === 0;
-        } else {
-          // After blink phase: stay visible (but still invincible)
-          this.game.playerMesh.visible = true;
+          if (framesFromStart < blinkDuration) {
+            // During blink phase: toggle visibility every blinkPeriod/2 frames
+            this.game.playerMesh.visible =
+              Math.floor(framesFromStart / (blinkPeriod / 2)) % 2 === 0;
+          } else {
+            // After blink phase: stay visible (but still invincible)
+            this.game.playerMesh.visible = true;
+          }
         }
+      } else if (this.game.playerMesh && !this.game.playerMesh.visible) {
+        this.game.playerMesh.visible = true; // Ensure visible when invincibility ends
       }
-    } else if (this.game.playerMesh && !this.game.playerMesh.visible) {
-      this.game.playerMesh.visible = true; // Ensure visible when invincibility ends
+
+      this.game.updatePowerUps();
+      this.updatePotion();
+
+      // === ZOMBIE AI (freeze if time freeze is active) ===
+      // All entity updates delegated to EntityManager
+      this.game.entityManager.updateEntities(smoothDelta);
+
+      // Collision checks
+      this.game.checkZombieCollision();
+      this.game.checkZombieDogCollision();
+      this.game.checkMonsterCollision();
+      this.game.checkHordeCollisions();
     }
 
-    this.game.updatePowerUps();
-    this.updatePotion();
+    // Update coin animations (visual only - always run)
     this.game.updateCoins();
-
-    // === ZOMBIE AI (freeze if time freeze is active) ===
-    // All entity updates delegated to EntityManager
-    this.game.entityManager.updateEntities(smoothDelta);
-
-    // Collision checks
-    this.game.checkZombieCollision();
-    this.game.checkZombieDogCollision();
-    this.game.checkMonsterCollision();
-    this.game.checkHordeCollisions();
 
     // === ENVIRONMENTAL EFFECTS (optimized with animation cache) ===
     const animTime = animationCache.animationTime;

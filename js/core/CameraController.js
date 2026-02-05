@@ -139,6 +139,10 @@ export class CameraController {
     if (instant) {
       this.isTransitioning = false;
       this.applyModeSettings(newMode);
+      // CRITICAL: Also instantly apply height and zoom values to prevent camera jitter
+      // This ensures the camera immediately uses the new mode's parameters
+      this.currentHeight = this.modeSettings[newMode].height;
+      this.targetHeight = this.modeSettings[newMode].height;
     } else {
       this.isTransitioning = true;
       this.transitionProgress = 0;
@@ -202,7 +206,7 @@ export class CameraController {
     // Larger mazes: ratio increases, camera pulls back smoothly
     // Max scaling factor capped at 2.0 to prevent camera going too far back
 
-    const scaleFactor = Math.min(this.mazeSizeRatio, 2.0);
+    const scaleFactor = Math.min(this.mazeSizeRatio, 1.5);
 
     // Calculate scaled distance for all modes
     const baseDistances = {
@@ -241,7 +245,7 @@ export class CameraController {
       // Scale distance: base + (scale - 1) * base * 0.5
       // This gives smooth progression without drastic changes
       this.modeSettings[mode].distance =
-        baseDist * (1 + (scaleFactor - 1) * 0.5);
+        baseDist * (1 + (scaleFactor - 1) * 0.25); // Reduced from 0.5 (Less zoom out)
 
       // IMPORTANT: Height remains fixed - only distance scales
       // This prevents the "zoom out" effect when leveling up
@@ -251,8 +255,7 @@ export class CameraController {
       // Increase FOV proportionally with distance to maintain viewing consistency
       // This compensates for the camera pulling further back
       // FOV increases by ~10% at maximum scale to keep visual perception stable
-      this.modeSettings[mode].fov =
-        baseFOV * (1 + (scaleFactor - 1) * 0.08);
+      this.modeSettings[mode].fov = baseFOV * (1 + (scaleFactor - 1) * 0.02); // Reduced from 0.08 (Less distortion)
     }
   }
 

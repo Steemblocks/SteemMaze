@@ -5,7 +5,7 @@
  */
 
 import { GameRules } from "./GameRules.js";
-import { steemIntegration } from "../../steem-integration.js";
+import { steemIntegration } from "../steem/index.js";
 
 export class GameStateManager {
   constructor(game) {
@@ -107,21 +107,43 @@ export class GameStateManager {
     document.getElementById("victoryScreen").classList.remove("active");
     document.getElementById("pauseScreen").classList.remove("active");
 
-    // Advance to next level
-    this.level++;
+    // CRITICAL FIX: Reset game state BEFORE showing screen
+    // This prevents input blocking during the transition (InputManager checks these flags)
+    this.game.won = false;
+    this.game.isRunning = false;
+    this.game.isPaused = false;
+
+    // Ensure UI is in game mode
+    this.game.ui.showScreen("gameScreen");
+
+    // CRITICAL FIX: Give blockchain operations a brief moment to queue
+    // The triggerVictory() calls postGameRecord which is async
+    // We need to ensure it's queued before we advance levels
+    // This prevents the next level starting before the record is in the queue
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Advancing Logic: Loop back to Level 1 after Level 10
+    if (this.level >= 10) {
+      this.level = 1;
+      this.game.ui.showToast(
+        "🏆 Game Completed! Restarting...",
+        "emoji_events",
+      );
+    } else {
+      this.level++;
+    }
+
     this.game.gameData.set("currentLevel", this.level);
-    
+
     // CRITICAL: Sync Game.level with GameStateManager.level
     // These are separate properties and must stay in sync
     this.game.level = this.level;
-    
-    // CRITICAL: Ensure game is not paused
-    this.game.isPaused = false;
-    
+
     // Update UI display
     document.getElementById("levelDisplay").textContent = this.level;
-    
+
     // Now resetGame() will use the correct new level
+    // This also re-attaches InputManager event listeners via reset process
     this.game.resetGame();
   }
 
@@ -132,12 +154,12 @@ export class GameStateManager {
     // Hide pause and victory screens
     document.getElementById("victoryScreen").classList.remove("active");
     document.getElementById("pauseScreen").classList.remove("active");
-    
+
     // CRITICAL: Reset game state completely
     this.game.won = false;
     this.game.isRunning = false;
     this.game.isPaused = false;
-    
+
     // Reset the game with same level
     this.game.resetGame();
   }
@@ -171,7 +193,10 @@ export class GameStateManager {
     }
 
     // Update HUD to reflect new inventory
-    if (this.game.shop && typeof this.game.shop.manualHUDUpdate === "function") {
+    if (
+      this.game.shop &&
+      typeof this.game.shop.manualHUDUpdate === "function"
+    ) {
       this.game.shop.manualHUDUpdate();
     }
 

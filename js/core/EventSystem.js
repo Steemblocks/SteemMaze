@@ -239,6 +239,11 @@ export class EventSystem {
     this.currentEvent = null;
     this.eventTimer = 0;
 
+    // CRITICAL: Unlock weather fog if it was locked by darkness
+    if (this.game.weatherManager) {
+      this.game.weatherManager.lockFogDensity(false);
+    }
+
     // Clear all pending timeouts and intervals
     if (this.darknessEndTimeout) {
       clearTimeout(this.darknessEndTimeout);

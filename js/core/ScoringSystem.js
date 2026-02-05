@@ -6,7 +6,7 @@
 
 import { GameRules } from "./GameRules.js";
 import { CameraMode } from "./CameraController.js";
-import { steemIntegration } from "../../steem-integration.js";
+import { steemIntegration } from "../steem/index.js";
 import { getUnlockedAchievements } from "./Achievements.js";
 
 export class ScoringSystem {
@@ -436,15 +436,27 @@ export class ScoringSystem {
           achievements: getUnlockedAchievements(d).map((a) => a.id),
         };
 
+        // CRITICAL FIX: Await the postGameRecord promise to ensure it broadcasts
+        // Do not let this fire-and-forget, as nextLevel() may proceed before record is queued
         const result = await steemIntegration.postGameRecord(gameRecord);
         if (result) {
           steemIntegration.registerActivePlayer(steemIntegration.username);
-          this.game.ui.showToast("🎮 Game record saved!", "check_circle");
+          this.game.ui.showToast("🎮 Game record saved to blockchain!", "check_circle");
         }
       } catch (error) {
         console.error("Error posting game record:", error);
-        // Don't show error toast - user may have cancelled Keychain
+        // Still attempt to register player even on error
+        try {
+          if (steemIntegration.isConnected) {
+            steemIntegration.registerActivePlayer(steemIntegration.username);
+          }
+        } catch (regError) {
+          console.error("Player registration error:", regError);
+        }
       }
+    } else {
+      // Not connected: Show notification that data is saved locally
+      this.game.ui.showToast("📊 Game stats saved locally. Login to sync to blockchain!", "storage");
     }
   }
 

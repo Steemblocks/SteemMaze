@@ -195,8 +195,20 @@ export class UIUpdater {
     const victoryScreen = document.getElementById("victoryScreen");
     if (victoryScreen) victoryScreen.classList.remove("active");
 
+    const pauseScreen = document.getElementById("pauseScreen");
+    if (pauseScreen) pauseScreen.classList.remove("active");
+
     const gameOverScreen = document.getElementById("gameOverScreen");
     if (gameOverScreen) gameOverScreen.classList.remove("active");
+
+    const steemShareModal = document.getElementById("steemShareModal");
+    if (steemShareModal) {
+      steemShareModal.style.display = "none";
+      steemShareModal.classList.remove("active");
+    }
+
+    const confirmationModal = document.getElementById("confirmationModal");
+    if (confirmationModal) confirmationModal.classList.remove("active");
   }
 
   /**

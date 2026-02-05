@@ -194,6 +194,38 @@ export class MiniMap {
   }
 
   dispose() {
+    // CRITICAL FIX: Dispose all maze wall geometries and materials
+    // Without this, memory accumulates with each level reset
+    this.scene.children.forEach((child) => {
+      if (child.geometry) {
+        child.geometry.dispose();
+      }
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach((m) => m.dispose?.());
+        } else {
+          child.material.dispose?.();
+        }
+      }
+    });
+
+    // Dispose zombie markers
+    this.zombieMarkers.forEach((marker) => {
+      if (marker.geometry) marker.geometry.dispose();
+      if (marker.material) marker.material.dispose();
+    });
+    this.zombieMarkers = [];
+
+    // Dispose player and goal markers
+    if (this.playerMarker) {
+      this.playerMarker.geometry.dispose();
+      this.playerMarker.material.dispose();
+    }
+    if (this.goalMarker) {
+      this.goalMarker.geometry.dispose();
+      this.goalMarker.material.dispose();
+    }
+
     if (this.renderer) {
       this.renderer.dispose();
     }

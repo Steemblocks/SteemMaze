@@ -57,29 +57,67 @@ self.addEventListener("fetch", (event) => {
         if (cachedResponse) {
           return cachedResponse;
         }
-        return fetch(event.request).then((response) => {
-          // Clone the response to put one in cache
-          if (
-            !response ||
-            response.status !== 200 ||
-            response.type !== "basic"
-          ) {
+        return fetch(event.request)
+          .then((response) => {
+            // Clone the response to put one in cache
+            if (
+              !response ||
+              response.status !== 200 ||
+              response.type !== "basic"
+            ) {
+              return response;
+            }
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
             return response;
-          }
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
+          })
+          .catch((error) => {
+            // Log fetch errors for debugging
+            console.warn(
+              `Failed to fetch asset ${event.request.url}:`,
+              error
+            );
+            // Try to return cached version or offline placeholder
+            return caches.match(event.request).catch(() => {
+              // If no cache available, return a network error response
+              return new Response(
+                'Asset unavailable (offline)',
+                { status: 503, statusText: 'Service Unavailable' }
+              );
+            });
           });
-          return response;
-        });
       }),
     );
   } else {
     // Network First for everything else (HTML, JS, API calls)
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match(event.request);
-      }),
+      fetch(event.request)
+        .then((response) => {
+          // Validate response is successful
+          if (!response || response.status >= 400) {
+            // For error responses, try cache fallback
+            return caches.match(event.request).then((cached) => {
+              return cached || response;
+            });
+          }
+          return response;
+        })
+        .catch((error) => {
+          // Log network errors
+          console.warn(
+            `Failed to fetch ${event.request.url}:`,
+            error
+          );
+          // Fall back to cache
+          return caches.match(event.request).catch(() => {
+            return new Response(
+              'Network request failed',
+              { status: 503, statusText: 'Service Unavailable' }
+            );
+          });
+        }),
     );
   }
 });

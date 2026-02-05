@@ -1,4 +1,4 @@
-/**
+        /**
  * Steem Integration Module
  * Handles posting game records to Steem blockchain and fetching data
  * Uses Steem Keychain for posting and direct API calls for fetching
@@ -58,6 +58,32 @@ export class SteemIntegration {
 
     // Start periodic registry sync (every 1 hour backup)
     this.startPeriodicRegistrySync();
+
+    // ============================================
+    // GAME RECORDS CONFIGURATION
+    // ============================================
+    // This dedicated account broadcasts all game records in a consolidated way
+    // Allows the steemmaze account to maintain a comprehensive game records log
+    this.gameRecordsConfig = {
+      account: "steemmaze",
+      // SECURITY: Same posting key as player registry (or separate if preferred)
+      postingKey: "YOUR_POSTING_KEY_HERE",
+      // How often to batch broadcast game records (in milliseconds) - default 5 minutes
+      broadcastInterval: 5 * 60 * 1000,
+      // Custom JSON ID for game records
+      jsonId: "steemmaze_game_record",
+    };
+
+    // Game records pending broadcast (in-memory queue)
+    this.pendingGameRecords = [];
+    this.gameRecordsSyncInterval = null;
+    this.lastGameRecordsBroadcast = 0;
+
+    // Load cached game records from localStorage
+    this.loadGameRecords();
+
+    // Start periodic game records sync
+    this.startPeriodicGameRecordsSync();
   }
 
   /**
@@ -405,9 +431,211 @@ export class SteemIntegration {
    * Debug: Show current registry status
    * Call from console: steemIntegration.debugRegistry()
    */
+
+  // ============================================
+  // GAME RECORDS METHODS
+  // ============================================
+
+  /**
+   * Load game records from localStorage
+   */
+  loadGameRecords() {
+    try {
+      const cached = localStorage.getItem("steemmaze_game_records_queue");
+      if (cached) {
+        const data = JSON.parse(cached);
+        this.pendingGameRecords = data.records || [];
+        this.lastGameRecordsBroadcast = data.lastBroadcast || 0;
+      }
+    } catch (e) {
+      console.warn("Failed to load game records queue:", e);
+      this.pendingGameRecords = [];
+    }
+  }
+
+  /**
+   * Save game records queue to localStorage
+   */
+  saveGameRecords() {
+    try {
+      localStorage.setItem(
+        "steemmaze_game_records_queue",
+        JSON.stringify({
+          records: this.pendingGameRecords,
+          lastBroadcast: this.lastGameRecordsBroadcast,
+          lastUpdated: Date.now(),
+        }),
+      );
+    } catch (e) {
+      console.warn("Failed to save game records queue:", e);
+    }
+  }
+
+  /**
+   * Add a game record to the queue for broadcasting
+   * This is called when a player finishes a game
+   */
+  addGameRecordToQueue(gameData) {
+    if (!gameData) return;
+
+    const gameRecord = {
+      player: this.username || gameData.player || "anonymous",
+      level: gameData.level || 1,
+      score: gameData.score || 0,
+      time: gameData.time || 0,
+      moves: gameData.moves || 0,
+      gems_collected: gameData.gems || 0,
+      total_gems: gameData.totalGems || 0,
+      stars: gameData.stars || 0,
+      maze_size: gameData.mazeSize || 15,
+      timestamp: new Date().toISOString(),
+      // Include full stats if available
+      stats: gameData.stats || {
+        games_played: gameData.gamesPlayed || 0,
+        wins: gameData.wins || 0,
+        losses: gameData.losses || 0,
+        total_coins: gameData.totalCoins || 0,
+        total_steps: gameData.totalSteps || 0,
+        highest_level: gameData.highestLevel || 0,
+        best_score: gameData.bestScore || 0,
+      },
+    };
+
+    // Keep queue size manageable (max 100 records before forcing broadcast)
+    if (this.pendingGameRecords.length >= 100) {
+      // Remove oldest record if queue is too large
+      this.pendingGameRecords.shift();
+    }
+
+    this.pendingGameRecords.push(gameRecord);
+    this.saveGameRecords();
+
+    return gameRecord;
+  }
+
+  /**
+   * Start periodic game records broadcast (every 5 minutes)
+   * Acts as a batch system to consolidate multiple game records
+   */
+  startPeriodicGameRecordsSync() {
+    // Clear any existing interval
+    if (this.gameRecordsSyncInterval) {
+      clearInterval(this.gameRecordsSyncInterval);
+    }
+
+    // Check and broadcast every 5 minutes
+    this.gameRecordsSyncInterval = setInterval(() => {
+      if (this.pendingGameRecords.length > 0) {
+        this.broadcastGameRecords();
+      }
+    }, this.gameRecordsConfig.broadcastInterval);
+  }
+
+  /**
+   * Broadcast pending game records to the steemmaze account
+   * Batches multiple game records into a single custom_json operation
+   */
+  async broadcastGameRecords() {
+    if (this.gameRecordsConfig.postingKey === "YOUR_POSTING_KEY_HERE") {
+      console.warn(
+        "Game records broadcast skipped: posting key not configured",
+      );
+      return false;
+    }
+
+    if (this.pendingGameRecords.length === 0) {
+      return false; // Nothing to broadcast
+    }
+
+    try {
+      const records = [...this.pendingGameRecords]; // Copy current queue
+      const timestamp = new Date().toISOString();
+
+      const customJsonData = {
+        app: "steemmaze",
+        version: "1.0",
+        type: "game_records_batch",
+        records: records,
+        batch_size: records.length,
+        broadcasted_at: timestamp,
+      };
+
+      // Use steem-js library for direct broadcast
+      if (typeof steem === "undefined") {
+        console.error("Steem library not loaded for game records broadcast");
+        return false;
+      }
+
+      // Set node
+      steem.api.setOptions({ url: this.currentNodeUrl });
+
+      const result = await new Promise((resolve, reject) => {
+        steem.broadcast.customJson(
+          this.gameRecordsConfig.postingKey,
+          [], // required_auths (empty for posting)
+          [this.gameRecordsConfig.account], // required_posting_auths
+          this.gameRecordsConfig.jsonId,
+          JSON.stringify(customJsonData),
+          (err, result) => {
+            if (err) reject(err);
+            else resolve(result);
+          },
+        );
+      });
+
+      // Clear the queue after successful broadcast
+      this.pendingGameRecords = [];
+      this.lastGameRecordsBroadcast = Date.now();
+      this.saveGameRecords();
+
+      console.log(
+        `Successfully broadcast ${records.length} game records to steemmaze account`,
+      );
+      return true;
+    } catch (error) {
+      console.error("Failed to broadcast game records:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Force broadcast game records immediately
+   * Useful after game completion to ensure record is saved
+   * Call from console: steemIntegration.forceBroadcastGameRecords()
+   */
+  async forceBroadcastGameRecords() {
+    if (this.pendingGameRecords.length === 0) {
+      console.log("No pending game records to broadcast");
+      return false;
+    }
+
+    const result = await this.broadcastGameRecords();
+    if (result) {
+      console.log("Game records broadcast successful");
+    } else {
+      console.log("Game records broadcast failed");
+    }
+    return result;
+  }
+
+  /**
+   * Get status of pending game records
+   */
+  getGameRecordsStatus() {
+    return {
+      pending_count: this.pendingGameRecords.length,
+      last_broadcast: new Date(this.lastGameRecordsBroadcast).toLocaleString(),
+      next_broadcast_in_ms:
+        this.gameRecordsConfig.broadcastInterval -
+        (Date.now() - this.lastGameRecordsBroadcast),
+      recent_records: this.pendingGameRecords.slice(-5),
+    };
+  }
+
   /**
    * Post game record to Steem blockchain using Keychain
    * Uses custom_json operation for pure data storage
+   * ALSO: Adds record to queue for broadcasting to steemmaze account
    */
   async postGameRecord(gameData) {
     if (!this.username) {
@@ -473,10 +701,33 @@ export class SteemIntegration {
               // Register this player as active for leaderboard discovery
               this.registerActivePlayer(this.username);
 
+              // ============================================
+              // NEW: Add game record to steemmaze queue
+              // ============================================
+              // Queue the game record for broadcasting to steemmaze account
+              this.addGameRecordToQueue(gameData);
+
+              // Attempt immediate broadcast if enough records accumulated
+              // or if posting key is configured
+              if (this.isGameRecordsConfigured()) {
+                // Broadcast immediately if this is a high-achievement record
+                const shouldBroadcastImmediately =
+                  gameData.stars === 3 || // Perfect completion
+                  (gameData.level && gameData.level % 5 === 0) || // Every 5th level
+                  this.pendingGameRecords.length >= 10; // Or if queue is full
+
+                if (shouldBroadcastImmediately) {
+                  this.broadcastGameRecords().catch((err) => {
+                    console.warn("Auto-broadcast failed (will retry on schedule):", err);
+                  });
+                }
+              }
+
               resolve({
                 success: true,
                 txId: response.result?.transaction_id,
                 timestamp: new Date().toISOString(),
+                gameRecordsQueued: this.pendingGameRecords.length,
               });
             } else {
               // Extract error message properly - Keychain sometimes returns object
@@ -501,6 +752,13 @@ export class SteemIntegration {
       console.error("Error posting game record:", error);
       throw error;
     }
+  }
+
+  /**
+   * Check if game records posting key is configured
+   */
+  isGameRecordsConfigured() {
+    return this.gameRecordsConfig.postingKey !== "YOUR_POSTING_KEY_HERE";
   }
 
   /**

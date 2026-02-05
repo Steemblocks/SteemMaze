@@ -21,21 +21,48 @@ export class Manual {
    * Fetches version from package.json and displays it in the manual
    */
   async initializeVersion() {
+    const DEFAULT_VERSION = "1.0.0";
     try {
-      const response = await fetch("/package.json");
+      const response = await fetch("/package.json", {
+        // Add Accept header to request JSON
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+
+      // Check if response is valid
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // Validate content type is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error(
+          `Invalid content-type: ${contentType}. Server returned HTML instead of JSON.`
+        );
+      }
+
       const packageData = await response.json();
-      if (this.versionBadge) {
-        this.versionBadge.textContent = `v${packageData.version}`;
+      if (packageData.version) {
+        if (this.versionBadge) {
+          this.versionBadge.textContent = `v${packageData.version}`;
+        }
+        // Store version globally for reference
+        window.GAME_VERSION = packageData.version;
+      } else {
+        throw new Error("No version property in package.json");
       }
-      // Store version globally for reference
-      window.GAME_VERSION = packageData.version;
     } catch (error) {
-      console.warn("Could not load version from package.json:", error);
-      // Fallback to v1.0.0 if fetch fails
+      console.warn(
+        `Could not load version from package.json: ${error.message}`,
+        error
+      );
+      // Fallback to default version
       if (this.versionBadge) {
-        this.versionBadge.textContent = "v1.0.0";
+        this.versionBadge.textContent = `v${DEFAULT_VERSION}`;
       }
-      window.GAME_VERSION = "1.0.0";
+      window.GAME_VERSION = DEFAULT_VERSION;
     }
   }
 

@@ -3,7 +3,7 @@
  * Handles all UI interactions, screen management, and user interface updates
  */
 
-import { steemIntegration } from "../../steem-integration.js";
+import { steemIntegration } from "../steem/index.js";
 import { ACHIEVEMENTS } from "../core/Achievements.js";
 
 export class UIManager {
@@ -22,6 +22,9 @@ export class UIManager {
     // Toast Notification Queue
     this.toastQueue = [];
     this.isToastShowing = false;
+
+    // CRITICAL FIX: Track if event listeners have been attached to prevent double-registration
+    this._listenersAttached = false;
 
     // Check if already logged in
     const savedUsername = this.gameData.get("steemUsername");
@@ -100,6 +103,12 @@ export class UIManager {
   }
 
   setupEventListeners() {
+    // CRITICAL FIX: Prevent double-registration of event listeners
+    // If listeners are already attached, skip to avoid accumulation
+    if (this._listenersAttached) {
+      return;
+    }
+
     // Login
     document.getElementById("loginBtn")?.addEventListener("click", () => {
       this.handleLogin();
@@ -130,7 +139,6 @@ export class UIManager {
       "profileBackBtn",
       "leaderboardBackBtn",
       "settingsBackBtn",
-      "backToMenuBtn",
       "quitBtn",
       "victoryMenuBtn",
     ].forEach((id) => {
@@ -140,6 +148,22 @@ export class UIManager {
         this.showScreen("mainMenu");
         window.game?.stopGame();
       });
+    });
+
+    // Explicit Game Back Button (Top Left)
+    document.getElementById("backToMenuBtn")?.addEventListener("click", (e) => {
+      console.log("Back to Menu clicked");
+      e.stopPropagation(); // Prevent propagation
+
+      document.getElementById("victoryScreen").classList.remove("active");
+      document.getElementById("pauseScreen").classList.remove("active");
+
+      this.showScreen("mainMenu");
+
+      // Stop generic game loop
+      if (window.game) {
+        window.game.stopGame();
+      }
     });
 
     // Game controls
@@ -392,7 +416,7 @@ export class UIManager {
 
     // Reset data
     document.getElementById("resetDataBtn")?.addEventListener("click", () => {
-      document.getElementById("confirmationModal").style.display = "grid";
+      document.getElementById("confirmationModal").classList.add("active");
     });
 
     document.getElementById("logoutBtn")?.addEventListener("click", () => {
@@ -402,50 +426,71 @@ export class UIManager {
     });
 
     document.getElementById("cancelResetBtn")?.addEventListener("click", () => {
-      document.getElementById("confirmationModal").style.display = "none";
+      document.getElementById("confirmationModal").classList.remove("active");
     });
 
     document
       .getElementById("confirmResetBtn")
       ?.addEventListener("click", async () => {
-        const username = this.gameData?.data?.steemUsername;
+        // Close modal immediately so UI doesn't look stuck
+        const modal = document.getElementById("confirmationModal");
+        if (modal) modal.classList.remove("active");
 
-        if (username) {
-          this.showToast("Resetting data on blockchain...", "cloud_upload");
+        try {
+          const username = this.gameData?.data?.steemUsername;
 
-          try {
-            // Post 0 stats to blockchain to effectively reset progress
-            const resetData = {
-              level: 0,
-              score: 0,
-              time: 0,
-              moves: 0,
-              gems: 0,
-              totalGems: 0,
-              stars: 0,
-              mazeSize: 15, // Default
-              gamesPlayed: 0,
-              wins: 0,
-              losses: 0,
-              totalCoins: 0,
-              totalZombiesPurified: 0,
-              totalSteps: 0,
-              highestLevel: 0,
-              bestScore: 0,
-              achievements: [], // Clear achievements
-            };
+          if (username) {
+            this.showToast("Resetting data on blockchain...", "cloud_upload");
 
-            await steemIntegration.postGameRecord(resetData);
-          } catch (err) {
-            console.error("Failed to reset blockchain data:", err);
-            // Continue with local reset even if blockchain fails
+            try {
+              // Post 0 stats to blockchain to effectively reset progress
+              const resetData = {
+                level: 0,
+                score: 0,
+                time: 0,
+                moves: 0,
+                gems: 0,
+                totalGems: 0,
+                stars: 0,
+                mazeSize: 15, // Default
+                gamesPlayed: 0,
+                wins: 0,
+                losses: 0,
+                totalCoins: 0,
+                totalZombiesPurified: 0,
+                totalSteps: 0,
+                highestLevel: 0,
+                bestScore: 0,
+                achievements: [], // Clear achievements
+              };
+
+              // Post record and wait for broadcast if promise is available
+              const result = await steemIntegration.postGameRecord(resetData);
+              if (result && result.broadcastPromise) {
+                // Wait for the actual broadcast to complete before reloading
+                await result.broadcastPromise;
+              }
+            } catch (err) {
+              console.error(
+                "Failed to reset blockchain data (continuing local reset):",
+                err,
+              );
+            }
           }
-        }
 
-        this.gameData.reset();
-        this.showToast("Data reset! Reloading...");
-        setTimeout(() => window.location.reload(), 1000);
+          this.gameData.reset();
+          this.showToast("Data reset! Reloading...", "check_circle");
+          setTimeout(() => window.location.reload(), 1000); // Slight delay to ensure toast is seen
+        } catch (fatalError) {
+          console.error("Fatal error during reset:", fatalError);
+          // Force local reset fallback
+          this.gameData?.reset();
+          window.location.reload();
+        }
       });
+
+    // Mark listeners as attached to prevent future re-registration
+    this._listenersAttached = true;
   }
 
   handleLogin() {
@@ -1207,11 +1252,15 @@ export class UIManager {
   showShareModal(score, stars, gameData) {
     // Store the data for use in the event handlers
     this.pendingShareData = { score, stars, gameData };
-    document.getElementById("steemShareModal").style.display = "grid";
+    const modal = document.getElementById("steemShareModal");
+    modal.style.display = "grid";
+    modal.classList.add("active");
   }
 
   hideShareModal() {
-    document.getElementById("steemShareModal").style.display = "none";
+    const modal = document.getElementById("steemShareModal");
+    modal.style.display = "none";
+    modal.classList.remove("active");
     this.pendingShareData = null;
   }
 }

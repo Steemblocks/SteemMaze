@@ -126,17 +126,23 @@ export const GameRules = {
   },
 
   /**
-   * Calculate Maze Size based on level with smooth scaling
+   * Calculate Maze Size based on level with linear scaling
+   * Logic: Level 1 = 8x8, Level 2 = 9x9... Level 10 = 17x17.
+   * Caps purely based on level logic here (User settings are applied as base in Game.js)
    */
-  getMazeSize(level, baseSize = 15) {
-    // Smooth, gradual progression is usually better for player flow.
-    // Use a formula that adds 1 unit of size roughly every 2 levels.
-    // L1: 15, L10: 20, L20: 25, L30: 30, L50: 40
+  getMazeSize(level, baseSize = 8) {
+    // New Logic: 8x8 at Level 1, +1 size per level
+    // Level 1: 8 + 0 = 8
+    // Level 10: 8 + 9 = 17
 
-    const sizeGrowth = Math.floor(level / 2);
+    // Effective level loops 1-10 if we implement the loop logic here or in GameStateManager
+    // Assuming GameStateManager handles the loop to Level 1, we just calculate for current level.
 
-    // Cap at 45 to prevent performance issues
-    return Math.min(baseSize + sizeGrowth, 45);
+    // Safety clamp to ensure it doesn't break if level goes > 10 unexpectedly
+    const effectiveLevel = level;
+
+    const sizeGrowth = effectiveLevel - 1;
+    return baseSize + sizeGrowth;
   },
 
   /**

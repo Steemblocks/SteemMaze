@@ -184,7 +184,7 @@
   display: none;
   place-items: center;
   z-index: 100;
-  pointer-events: auto;
+  pointer-events: none; /* CRITICAL FIX: Don't block inputs when not active */
   opacity: 0;
   transition: opacity 0.3s var(--transition-smooth);
 }
@@ -192,6 +192,7 @@
 .overlay.active {
   display: grid;
   opacity: 1;
+  pointer-events: auto; /* Re-enable pointer events when active */
   animation: overlayIn 0.3s var(--transition-smooth) forwards;
 }
 
