@@ -32,15 +32,12 @@ export class CollectibleManager {
 
     // Number of gems scales with level (more gems = more challenge to collect all)
     const gemCount = Math.min(3 + Math.floor(this.game.level / 2), 10);
-    const offset =
-      -(this.game.MAZE_SIZE * this.game.CELL_SIZE) / 2;
+    const offset = -(this.game.MAZE_SIZE * this.game.CELL_SIZE) / 2;
 
     // Place gems at random maze cells (not start or goal)
     const usedCells = new Set();
     usedCells.add(`0,0`); // Goal
-    usedCells.add(
-      `${this.game.MAZE_SIZE - 1},${this.game.MAZE_SIZE - 1}`,
-    ); // Start
+    usedCells.add(`${this.game.MAZE_SIZE - 1},${this.game.MAZE_SIZE - 1}`); // Start
 
     for (let i = 0; i < gemCount; i++) {
       let x, z;
@@ -104,8 +101,7 @@ export class CollectibleManager {
     this.coins = [];
 
     const count = Math.floor(this.game.MAZE_SIZE * 0.8) + this.game.level; // Scale with size
-    const offset =
-      -(this.game.MAZE_SIZE * this.game.CELL_SIZE) / 2;
+    const offset = -(this.game.MAZE_SIZE * this.game.CELL_SIZE) / 2;
 
     // Simple gold material
     const mat = new THREE.MeshStandardMaterial({
@@ -167,15 +163,12 @@ export class CollectibleManager {
 
     // Number of power-ups (1-2 based on level)
     const powerUpCount = Math.min(1 + Math.floor(this.game.level / 4), 2);
-    const offset =
-      -(this.game.MAZE_SIZE * this.game.CELL_SIZE) / 2;
+    const offset = -(this.game.MAZE_SIZE * this.game.CELL_SIZE) / 2;
 
     // Track used cells
     const usedCells = new Set();
     usedCells.add(`0,0`); // Goal
-    usedCells.add(
-      `${this.game.MAZE_SIZE - 1},${this.game.MAZE_SIZE - 1}`,
-    ); // Start
+    usedCells.add(`${this.game.MAZE_SIZE - 1},${this.game.MAZE_SIZE - 1}`); // Start
 
     // Add gem positions to avoid
     this.gems.forEach((gem) => {
@@ -269,50 +262,68 @@ export class CollectibleManager {
         gem.userData.collected = true;
         this.game.scoringSystem.recordGemCollection();
 
-        // Defer heavy UI operations to next frame to prevent frame hangs
-        const gemToAnimate = gem;
+        // OPTIMIZATION: Immediately hide the original gem (including its PointLight)
+        // This is the key to smooth collection - the PointLight is expensive to render
         const gemPosition = gem.position.clone();
+        gem.visible = false;
 
-        // Start animation immediately
-        const startY = gemToAnimate.position.y;
-        const startScale = gemToAnimate.scale.x;
+        // Remove the original gem from scene immediately to free up the PointLight
+        this.game.scene.remove(gem);
+
+        // SPAWN LIGHTWEIGHT TEMPORARY VISUAL GEM for collection animation
+        // (Similar to how coins work - instant hide + temp visual)
+        const tempGeo = new THREE.OctahedronGeometry(0.35, 0);
+        const tempMat = new THREE.MeshStandardMaterial({
+          color: 0xa855f7,
+          emissive: 0xa855f7,
+          emissiveIntensity: 1.5,
+          metalness: 0.9,
+          roughness: 0.1,
+          transparent: true,
+          opacity: 0.9,
+        });
+        const visualGem = new THREE.Mesh(tempGeo, tempMat);
+        visualGem.position.copy(gemPosition);
+        this.game.scene.add(visualGem);
+
+        // Animation parameters
+        const startY = visualGem.position.y;
         const startTime = performance.now();
         const duration = 300; // 300ms animation
 
-        const animateCollection = (currentTime) => {
+        const animateVisualGem = (currentTime) => {
           const elapsed = currentTime - startTime;
           const progress = Math.min(elapsed / duration, 1);
 
           // Ease out curve
           const eased = 1 - Math.pow(1 - progress, 3);
 
-          // Fly up and scale up slightly then shrink
-          gemToAnimate.position.y = startY + eased * 2;
-          gemToAnimate.rotation.y += 0.15; // Fast spin during collection
+          // Fly up and spin
+          visualGem.position.y = startY + eased * 2;
+          visualGem.rotation.y += 0.15;
 
-          if (progress < 0.5) {
-            // Scale up first half
-            gemToAnimate.scale.setScalar(startScale * (1 + eased * 0.5));
-          } else {
-            // Scale down second half
-            gemToAnimate.scale.setScalar(startScale * (1.25 - (eased - 0.5) * 2.5));
-          }
+          // Scale down and fade out
+          const scale = 1 - eased * 0.8;
+          visualGem.scale.setScalar(scale);
+          tempMat.opacity = 0.9 * (1 - eased);
 
           if (progress < 1) {
-            requestAnimationFrame(animateCollection);
+            requestAnimationFrame(animateVisualGem);
           } else {
-            // Remove after animation complete
-            this.game.scene.remove(gemToAnimate);
+            // Cleanup temp visual
+            this.game.scene.remove(visualGem);
+            tempGeo.dispose();
+            tempMat.dispose();
           }
         };
 
-        requestAnimationFrame(animateCollection);
+        requestAnimationFrame(animateVisualGem);
 
         // Defer secondary effects to avoid frame spike
         setTimeout(() => {
-          // Particle burst effect at gem location (happens after animation starts)
+          // Particle burst effect - reduced from 20 to 8 for better performance
           if (this.game.particleTrail) {
-            this.game.particleTrail.burst(gemPosition, 20, 0xa855f7);
+            this.game.particleTrail.burst(gemPosition, 8, 0xa855f7);
           }
 
           // Visual Feedback
@@ -323,19 +334,15 @@ export class CollectibleManager {
 
           // Show toast for gem with life bonus
           this.game.ui.showToast(
-            `✨ Gem Collected! +1 Life (${this.game.gemsCollected}/${this.gems.length})`,
+            `✨ Gem Collected! +1 Life (${this.game.scoringSystem.gemsCollected}/${this.gems.length})`,
             "favorite",
           );
 
           // AUDIO: Play gem collect sound (deferred to prevent blocking)
-          if (this.game.audioManager)
-            this.game.audioManager.playGem();
+          if (this.game.audioManager) this.game.audioManager.playGem();
 
           // Vibration feedback (deferred)
-          if (
-            this.game.gameData.getSetting("vibration") &&
-            navigator.vibrate
-          )
+          if (this.game.gameData.getSetting("vibration") && navigator.vibrate)
             navigator.vibrate([10, 30, 10]);
         }, 0); // Deferred to next available frame
       }
@@ -371,7 +378,7 @@ export class CollectibleManager {
         const hideDummy = new THREE.Object3D();
         hideDummy.scale.set(0, 0, 0);
         hideDummy.updateMatrix();
-        
+
         if (this.coinsMesh) {
           this.coinsMesh.setMatrixAt(coinData.index, hideDummy.matrix);
           this.coinsMesh.instanceMatrix.needsUpdate = true;
@@ -451,10 +458,7 @@ export class CollectibleManager {
           if (this.game.audioManager) this.game.audioManager.playCoin();
 
           // Vibration feedback (deferred)
-          if (
-            this.game.gameData.getSetting("vibration") &&
-            navigator.vibrate
-          ) {
+          if (this.game.gameData.getSetting("vibration") && navigator.vibrate) {
             navigator.vibrate(GameRules.VIBRATION_COLLECT);
           }
         }, 0); // Deferred to next available frame
@@ -530,12 +534,13 @@ export class CollectibleManager {
    */
   animateGems(smoothDelta) {
     if (!this.gems) return;
-    
+
     const gemRotSpeed = smoothDelta * 1.2;
     this.gems.forEach((gem) => {
       gem.rotation.y += gemRotSpeed;
       gem.position.y =
-        1 + this.game.animationCache?.getWave(0.5, 0.15, gem.userData.gridX) || 1;
+        1 + this.game.animationCache?.getWave(0.5, 0.15, gem.userData.gridX) ||
+        1;
     });
   }
 

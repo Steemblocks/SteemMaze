@@ -11,13 +11,13 @@ import { MazeGenerator } from "./MazeGenerator.js";
 export class WorldGenerator {
   constructor(game) {
     this.game = game; // Reference to parent Game instance for scene/renderer access
-    
+
     // Background scene components
     this.bgScene = null;
     this.bgCamera = null;
     this.bgRenderer = null;
     this.bgParticles = null;
-    
+
     // World elements
     this.mountains = [];
     this.ground = null;
@@ -426,12 +426,12 @@ export class WorldGenerator {
       if (m.material) m.material.dispose();
     });
     this.mountains = [];
-    
+
     if (this.ground) {
       if (this.ground.geometry) this.ground.geometry.dispose();
       if (this.ground.material) this.ground.material.dispose();
     }
-    
+
     this.fireflies.forEach((f) => {
       this.game.scene.remove(f);
       if (f.geometry) f.geometry.dispose();

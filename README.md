@@ -4,7 +4,6 @@ SteemMaze is a web-based 3D maze exploration game integrated with the Steem bloc
 
 <img width="1365" height="632" alt="image" src="https://github.com/user-attachments/assets/42ce5c11-6929-4c84-92cd-9ac60d715b2a" />
 
-
 ## Features
 
 - **3D Gameplay**: Immersive 3D environment built with Three.js, featuring dynamic lighting, fog, and procedurally generated terrain.
@@ -61,15 +60,11 @@ Security is a priority. This project uses environment variables and local config
    ```
 
 2. **Local Config**:
-   Copy the local configuration example:
-
-   ```bash
-   copy config.local.example.js config.local.js
-   ```
+   The configuration file is located at `public/steem-config.local.js`. This file is tracked by Git, but sensitive keys should be replaced with placeholders before committing.
 
 3. **Edit Configuration**:
-   Open `config.local.js` and update the settings as needed.
-   _Note: Never commit your `config.local.js` or `.env` files to version control._
+   Open `public/steem-config.local.js` and update the settings as needed.
+   _Note: Be careful not to commit your actual private posting keys! Replace them with placeholders before pushing to the server._
 
 ## Running the Application
 

@@ -1,8 +1,6 @@
 /**
  * Steem Configuration File
  *
- * Rename is file into steem-config.local.js
- *
  * This file contains sensitive Steem blockchain credentials for the GAME ACCOUNT.
  * NEVER commit this file to Git!
  *
@@ -24,7 +22,7 @@ export const steemConfig = {
 
     // REQUIRED: The Posting Private Key for 'steemmaze'
     // This allows the game to auto-save data without asking the user.
-    postingKey: "YOUR_STEEMMAZE_POSTING_KEY_HERE",
+    postingKey: "Your private key",
   },
 
   // ============================================

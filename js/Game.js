@@ -184,15 +184,15 @@ export class Game {
   }
 
   get MAZE_SIZE() {
-    // 1. Strict Rules: Level 1 = 8x8, increasing by 1 per level.
-    // We ignore the user setting "mazeSize" base to enforce the 8-10 progression rule.
-    const baseSize = 8;
+    // 1. Strict Rules: Level 1 = 10x10, increasing by 1 per level.
+    // We ignore the user setting "mazeSize" base to enforce the 10-19 progression rule.
+    const baseSize = 10;
 
     // 2. Combine with level progression
     const calculatedSize = GameRules.getMazeSize(this.level, baseSize);
 
-    // 3. Clamp for safety (min 8x8, max 60x60)
-    return Math.max(8, Math.min(60, calculatedSize));
+    // 3. Clamp for safety (min 10x10, max 60x60)
+    return Math.max(10, Math.min(60, calculatedSize));
   }
 
   // ===== INPUT STATE GETTERS (delegate to InputManager) =====
@@ -1505,6 +1505,17 @@ export class Game {
       this.particleTrail.setColor(0x4ade80);
     }
 
+    // CRITICAL FIX: Recreate CompassHUD and ComboMeter after cleanup disposed them
+    // These HUD elements are only created once in initEffectsSystems() but are
+    // disposed in cleanup(). Without recreating them here, they disappear after
+    // the first game reset or level change.
+    if (!this.compassHUD) {
+      this.compassHUD = new CompassHUD();
+    }
+    if (!this.comboMeter) {
+      this.comboMeter = new ComboMeter();
+    }
+
     // --- DETERMINISTIC EVENTS ---
     // Schedule periodic darkness events (level 5+)
     this.eventSystem.scheduleDarknessEvents();
@@ -1645,13 +1656,15 @@ export class Game {
       this.postProcessing.dispose();
     }
 
-    // Dispose HUD elements
+    // Dispose HUD elements and null references so resetGame() recreation logic works
     if (this.compassHUD) {
       this.compassHUD.dispose();
+      this.compassHUD = null;
     }
 
     if (this.comboMeter) {
       this.comboMeter.dispose();
+      this.comboMeter = null;
     }
 
     // CRITICAL FIX: Dispose InputManager to reset the _listenersAttached flag

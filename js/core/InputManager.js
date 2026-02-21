@@ -17,7 +17,7 @@ export class InputManager {
     this._mouseMoveHandler = null;
     this._keyDownHandler = null;
     this._mobileHandlers = new Map(); // Store mobile button handlers
-    
+
     // Track if listeners are already attached to prevent double-registration
     this._listenersAttached = false;
   }
@@ -182,7 +182,9 @@ export class InputManager {
     // This can happen when resetGame() disposes and re-attaches listeners
     // Without this check, keys trigger movement TWICE (moving 2 blocks instead of 1)
     if (this._listenersAttached) {
-      console.warn("InputManager: Event listeners already attached, skipping re-registration");
+      console.warn(
+        "InputManager: Event listeners already attached, skipping re-registration",
+      );
       return;
     }
 
@@ -203,7 +205,7 @@ export class InputManager {
 
     // Mobile / D-Pad Controls
     this._setupMobileControls();
-    
+
     // Mark listeners as attached
     this._listenersAttached = true;
   }
@@ -332,7 +334,7 @@ export class InputManager {
     this._resizeHandler = null;
     this._mouseMoveHandler = null;
     this._keyDownHandler = null;
-    
+
     // CRITICAL: Mark listeners as detached so setupEventListeners() can re-attach them
     // This prevents double-registration on next resetGame() call
     this._listenersAttached = false;

@@ -87,8 +87,9 @@ export class MazeGenerator {
     // So if we want an entrance at 0,0 left, we set left = false?
     // Game.js Line 626: data[0][0].left = false;
     // Game.js Line 627: data[size - 1][size - 1].right = false;
-    maze[0][0].left = false;
-    maze[size - 1][size - 1].right = false;
+    // Fully enclose the maze - we use a 3D portal for the exit and just spawn the player inside
+    // maze[0][0].left = false;
+    // maze[size - 1][size - 1].right = false;
 
     // Cleanup visited
     for (let z = 0; z < size; z++) {

@@ -79,6 +79,9 @@ export class UIManager {
           window.game.audioManager.playMusic();
         } else if (screenId === "gameScreen") {
           window.game.audioManager.stopMusic();
+          // Focus window immediately to capture keyboard events (WASD)
+          window.focus();
+          document.body.focus();
         }
       }
     }
