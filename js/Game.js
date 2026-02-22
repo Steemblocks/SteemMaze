@@ -629,13 +629,14 @@ export class Game {
     // Prevent memory leaks by not just filtering - actually clean up Three.js resources
     const toKeep = new Set([
       this.worldGenerator.ground,
+      ...(this.worldGenerator.mountains || []), // Prevent mountains from wiping out
       ...this.scene.children.filter(
         (c) =>
           c.type === "AmbientLight" ||
           c.type === "DirectionalLight" ||
           c.type === "PointLight",
       ),
-      ...this.fireflies,
+      ...(this.worldGenerator.fireflies || []), // Corrected reference
     ]);
 
     // Dispose removed objects to prevent memory leaks
@@ -678,16 +679,31 @@ export class Game {
       const ctx = canvas.getContext("2d");
 
       // Base Noise Layer
-      ctx.fillStyle = "#999999";
+      // Making it a dark earthy grey-green to simulate old mossy stone
+      ctx.fillStyle = "#6b7a61";
       ctx.fillRect(0, 0, size, size);
 
       // Grain Noise - Larger grains to reduce pixel shimmy
       for (let i = 0; i < 80000; i++) {
         const x = Math.random() * size;
         const y = Math.random() * size;
-        const v = Math.floor(Math.random() * 40) + 140;
-        ctx.fillStyle = `rgba(${v},${v},${v}, 0.4)`;
+        const v = Math.floor(Math.random() * 50) + 60; // Darker grains
+        ctx.fillStyle = `rgba(${v}, ${v + 10}, ${v}, 0.6)`; // Slight green tint to grains
         ctx.fillRect(x, y, 3, 3); // Slightly larger grain
+      }
+
+      // Moss Patches
+      for (let i = 0; i < 40; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        const r = Math.random() * 80 + 30; // random patch size
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, "rgba(45, 90, 39, 0.4)"); // Deep moss green
+        g.addColorStop(1, "rgba(45, 90, 39, 0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
       }
 
       // Soft Clouds/Dirt (Add variegation)
@@ -704,10 +720,10 @@ export class Game {
         ctx.fill();
       }
 
-      // Cracks
-      ctx.strokeStyle = "rgba(80, 80, 80, 0.3)";
-      ctx.lineWidth = 2; // Thicker lines for visibility at distance
-      for (let i = 0; i < 15; i++) {
+      // Cracks - dark and mossy
+      ctx.strokeStyle = "rgba(30, 45, 25, 0.6)"; // Dark mossy cracks
+      ctx.lineWidth = 3; // Thicker lines for visibility at distance
+      for (let i = 0; i < 20; i++) {
         ctx.beginPath();
         let cx = Math.random() * size;
         let cy = Math.random() * size;
@@ -736,10 +752,10 @@ export class Game {
     const material = new THREE.MeshStandardMaterial({
       map: stoneTexture,
       bumpMap: stoneTexture,
-      bumpScale: 0.02,
+      bumpScale: 0.05, // more bump for old walls
       roughnessMap: stoneTexture,
-      color: 0x999999, // Darker grey to prevent BLOOM GLOW
-      roughness: 0.9,
+      color: 0x93a38a, // Mossy stone greenish grey base color
+      roughness: 0.95,
       metalness: 0.0,
     });
 

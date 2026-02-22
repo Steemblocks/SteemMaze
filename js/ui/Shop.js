@@ -303,16 +303,11 @@ export class Shop {
       this.game.cancelFogEvents();
     }
 
-    // Cancel any darkness pulse effect
-    if (this.game.darknessPulseInterval) {
-      clearInterval(this.game.darknessPulseInterval);
-      this.game.darknessPulseInterval = null;
-    }
-
-    // Cancel horde spawn check and despawn existing horde
-    if (this.game.hordeCheckTimeout) {
-      clearTimeout(this.game.hordeCheckTimeout);
-      this.game.hordeCheckTimeout = null;
+    // Properly end darkness event if active
+    if (this.game.eventSystem && this.game.eventSystem.isDarknessActive) {
+      this.lightBoostActive = true;
+      this.game.eventSystem.endDarknessEvent(this.game.defaultFogDensity);
+      this.lightBoostActive = false; // Reset to true later in the function
     }
 
     // NOTE: Light Burst does NOT despawn zombies anymore
@@ -354,24 +349,22 @@ export class Shop {
     this.lightBoostTimeout = null;
     this.game.powerUpSystem.deactivateLightBoost(); // Clear repelling flag
 
+    // Resume weather fog effects so they don't break, overriding the base density
+    if (this.game.weatherManager) {
+      this.game.weatherManager.resumeFogEffects();
+    }
+
     // Restore fog based on current game state
+    // Overrides WeatherManager's base restore
     if (this.game.scene.fog) {
       // If darkness is active, restore to darkness fog level
       if (this.game.eventSystem && this.game.eventSystem.isDarknessActive) {
-        const originalFog = this.game.defaultFogDensity;
+        const originalFog = this.game.defaultFogDensity || 0.02;
         this.game.scene.fog.density = originalFog * 2.5; // Darkness level
       } else {
         // Otherwise restore to normal density
         this.game.scene.fog.density = this.defaultFogDensity;
       }
-    }
-
-    // Resume weather fog effects (but don't restore if darkness is active)
-    if (
-      this.game.weatherManager &&
-      (!this.game.eventSystem || !this.game.eventSystem.isDarknessActive)
-    ) {
-      this.game.weatherManager.resumeFogEffects();
     }
 
     this.game.ui.showToast("Light Boost Ended", "dark_mode");
@@ -397,16 +390,11 @@ export class Shop {
       this.game.cancelFogEvents();
     }
 
-    // Cancel any darkness pulse effect
-    if (this.game.darknessPulseInterval) {
-      clearInterval(this.game.darknessPulseInterval);
-      this.game.darknessPulseInterval = null;
-    }
-
-    // Cancel horde spawn check and despawn existing horde
-    if (this.game.hordeCheckTimeout) {
-      clearTimeout(this.game.hordeCheckTimeout);
-      this.game.hordeCheckTimeout = null;
+    // Properly end darkness event if active
+    if (this.game.eventSystem && this.game.eventSystem.isDarknessActive) {
+      this.fogRemoverActive = true;
+      this.game.eventSystem.endDarknessEvent(this.game.defaultFogDensity);
+      this.fogRemoverActive = false; // Reset to true later in the function
     }
 
     // NOTE: Fog Remover does NOT despawn zombies anymore
@@ -441,26 +429,24 @@ export class Shop {
     this.fogRemoverActive = false;
     this.fogRemoverTimeout = null;
 
+    // Resume weather fog effects so they don't break, overriding the base density
+    if (this.game.weatherManager) {
+      this.game.weatherManager.resumeFogEffects();
+    }
+
     // Restore fog based on current game state
+    // Overrides WeatherManager's base restore
     if (this.game.scene.fog) {
       // If darkness is active when fog remover ends, restore to darkness fog level
       if (this.game.eventSystem && this.game.eventSystem.isDarknessActive) {
         // Darkness is distinct from weather, usually managed by EventSystem
         // but we need to ensure we don't accidentally "clean" the darkness away
-        const originalFog = this.game.defaultFogDensity;
+        const originalFog = this.game.defaultFogDensity || 0.02;
         this.game.scene.fog.density = originalFog * 2.5; // Darkness level
       } else {
         // Otherwise restore to normal density
         this.game.scene.fog.density = this.defaultFogDensity;
       }
-    }
-
-    // Resume weather fog effects (but not if darkness is active, as darkness overrides weather)
-    if (
-      this.game.weatherManager &&
-      (!this.game.eventSystem || !this.game.eventSystem.isDarknessActive)
-    ) {
-      this.game.weatherManager.resumeFogEffects();
     }
 
     this.game.ui.showToast("Fog Remover Ended", "blur_on");

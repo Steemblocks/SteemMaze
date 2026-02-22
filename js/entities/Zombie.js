@@ -101,16 +101,29 @@ export class Zombie {
     if (!Zombie.assets) {
       // ... (asset creation code remains same but we can simplify if we build prototype immediately)
       // Actually, let's keep assets for now in case we need them, but build prototype.
-      const rottenColor = 0x4a5d4a;
-      const bloodColor = 0x8b0000;
+      const rottenColor = 0x5a6d5a; // Slightly lighter, sicker green
+      const bloodColor = 0x5b0000; // Darker dried blood
+      // Adding clothing colors to make them look more like former humans
+      const shirtColor = 0x3d4352; // Tattered greyish blue shirt
+      const pantsColor = 0x2a2822; // Dirtied brown/black pants
 
       Zombie.assets = {
         bodyMat: new THREE.MeshStandardMaterial({
           color: rottenColor,
-          emissive: 0x1a1a1a,
-          emissiveIntensity: 0.1,
-          metalness: 0.1,
+          emissive: 0x112211,
+          emissiveIntensity: 0.15,
+          metalness: 0.0,
+          roughness: 1.0,
+        }),
+        shirtMat: new THREE.MeshStandardMaterial({
+          color: shirtColor,
           roughness: 0.9,
+          flatShading: true,
+        }),
+        pantsMat: new THREE.MeshStandardMaterial({
+          color: pantsColor,
+          roughness: 0.9,
+          flatShading: true,
         }),
         bloodMat: new THREE.MeshStandardMaterial({
           color: bloodColor,
@@ -186,8 +199,8 @@ export class Zombie {
     neck.castShadow = true;
     group.add(neck);
 
-    // Torso
-    const torso = new THREE.Mesh(assets.torsoGeo, assets.bodyMat);
+    // Torso (Shirt)
+    const torso = new THREE.Mesh(assets.torsoGeo, assets.shirtMat);
     torso.position.y = 0.95;
     torso.rotation.x = 0.15;
     torso.castShadow = true;
@@ -203,70 +216,70 @@ export class Zombie {
       group.add(rib);
     }
 
-    // Hips
-    const hips = new THREE.Mesh(assets.hipsGeo, assets.bodyMat);
+    // Hips (Pants)
+    const hips = new THREE.Mesh(assets.hipsGeo, assets.pantsMat);
     hips.position.y = 0.58;
     hips.castShadow = true;
     group.add(hips);
 
-    // Left Leg
+    // Left Leg (Pants)
     const leftLegPivot = new THREE.Group();
     leftLegPivot.position.set(-0.08, 0.5, 0);
     leftLegPivot.name = "leftLegPivot";
-    const leftLeg = new THREE.Mesh(assets.legGeo, assets.bodyMat);
+    const leftLeg = new THREE.Mesh(assets.legGeo, assets.pantsMat);
     leftLeg.position.y = -0.25;
     leftLeg.castShadow = true;
     leftLegPivot.add(leftLeg);
 
-    const leftFoot = new THREE.Mesh(assets.footGeo, assets.bodyMat);
+    const leftFoot = new THREE.Mesh(assets.footGeo, assets.pantsMat); // Shoes as pants colored for now
     leftFoot.position.set(0, -0.52, 0.04);
     leftFoot.rotation.y = 0.3;
     leftLegPivot.add(leftFoot);
     group.add(leftLegPivot);
 
-    // Right Leg
+    // Right Leg (Pants)
     const rightLegPivot = new THREE.Group();
     rightLegPivot.position.set(0.08, 0.5, 0);
     rightLegPivot.name = "rightLegPivot";
-    const rightLeg = new THREE.Mesh(assets.legGeo, assets.bodyMat);
+    const rightLeg = new THREE.Mesh(assets.legGeo, assets.pantsMat);
     rightLeg.position.y = -0.25;
     rightLeg.castShadow = true;
     rightLegPivot.add(rightLeg);
 
-    const rightFoot = new THREE.Mesh(assets.footGeo, assets.bodyMat);
+    const rightFoot = new THREE.Mesh(assets.footGeo, assets.pantsMat);
     rightFoot.position.set(0, -0.52, 0.04);
     rightFoot.rotation.y = -0.2;
     rightLegPivot.add(rightFoot);
     group.add(rightLegPivot);
 
-    // Left Arm
+    // Left Arm (Shirt sleeves)
     const leftArmPivot = new THREE.Group();
     leftArmPivot.position.set(-0.28, 1.1, 0);
     leftArmPivot.rotation.z = 0.4;
     leftArmPivot.name = "leftArmPivot";
-    const leftArm = new THREE.Mesh(assets.armGeo, assets.bodyMat);
+    const leftArm = new THREE.Mesh(assets.armGeo, assets.shirtMat);
     leftArm.position.y = -0.2;
     leftArm.castShadow = true;
     leftArmPivot.add(leftArm);
 
-    const leftClaw = new THREE.Mesh(assets.clawGeo, assets.bloodMat);
+    const leftClaw = new THREE.Mesh(assets.clawGeo, assets.bodyMat); // Exposed rotting hand
     leftClaw.position.set(0, -0.45, 0);
     leftClaw.rotation.x = Math.PI;
     leftArmPivot.add(leftClaw);
     group.add(leftArmPivot);
 
-    // Right Arm
+    // Right Arm (Shirt sleeves)
     const rightArmPivot = new THREE.Group();
     rightArmPivot.position.set(0.28, 1.1, 0);
     rightArmPivot.rotation.z = -0.3;
     rightArmPivot.rotation.x = -0.5;
     rightArmPivot.name = "rightArmPivot";
-    const rightArm = new THREE.Mesh(assets.armGeo, assets.bodyMat);
+    const rightArm = new THREE.Mesh(assets.armGeo, assets.shirtMat);
     rightArm.position.y = -0.2;
     rightArm.castShadow = true;
     rightArmPivot.add(rightArm);
 
-    const rightClaw = new THREE.Mesh(assets.clawGeo, assets.bloodMat);
+    const rightClaw = new THREE.Mesh(assets.clawGeo, assets.bodyMat); // Exposed rotting hand
     rightClaw.position.set(0, -0.45, 0);
     rightClaw.rotation.x = Math.PI;
     rightArmPivot.add(rightClaw);

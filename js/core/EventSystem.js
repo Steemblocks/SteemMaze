@@ -65,8 +65,11 @@ export class EventSystem {
    * After level 5: Spawns zombie horde if player doesn't use light boost within 2 seconds
    */
   triggerDarknessEvent() {
-    // Check if Fog Remover prevents darkness
-    if (this.game.shop && this.game.shop.fogRemoverActive) {
+    // Check if Fog Remover or Light Burst prevents darkness
+    if (
+      this.game.shop &&
+      (this.game.shop.fogRemoverActive || this.game.shop.lightBoostActive)
+    ) {
       return;
     }
 
@@ -151,14 +154,19 @@ export class EventSystem {
       this.darknessPulseInterval = null;
     }
 
-    // Restore fog
-    if (this.game.scene.fog && originalFog) {
-      this.game.scene.fog.density = originalFog;
-    }
-
     // Resume weather fog effects fully
     if (this.game.weatherManager) {
       this.game.weatherManager.lockFogDensity(false);
+    }
+
+    // Restore fog ONLY IF no shop override is currently active
+    const shopOverride =
+      this.game.shop &&
+      (this.game.shop.fogRemoverActive || this.game.shop.lightBoostActive);
+
+    // Restore fog
+    if (this.game.scene.fog && originalFog && !shopOverride) {
+      this.game.scene.fog.density = originalFog;
     }
 
     // NOTE: We NO LONGER despawn horde entities when darkness ends!

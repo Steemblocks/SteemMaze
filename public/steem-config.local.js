@@ -22,7 +22,7 @@ export const steemConfig = {
 
     // REQUIRED: The Posting Private Key for 'steemmaze'
     // This allows the game to auto-save data without asking the user.
-    postingKey: "Your private key",
+    postingKey: "your key",
   },
 
   // ============================================

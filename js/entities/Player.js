@@ -36,120 +36,156 @@ export class Player {
     // Material reference for color changes
     this.bodyMaterial = null;
 
+    // Materials list for hitting/flashing effects
+    this.animatableMaterials = [];
+
     // Create the mesh
     this.mesh = this.createMesh();
   }
 
   /**
-   * Create the humanoid player mesh
+   * Create the humanoid player mesh with adventurer gear
    */
   createMesh() {
     const group = new THREE.Group();
 
-    // Material for the player body - human skin tone
-    this.bodyMaterial = new THREE.MeshStandardMaterial({
-      color: 0xffdbac, // Natural skin tone (peach)
-      emissive: 0x000000, // No glow
+    // Materials
+    const skinMat = new THREE.MeshStandardMaterial({
+      color: 0xffdbac, // Natural skin tone
       emissiveIntensity: 0.0,
-      metalness: 0.1,
       roughness: 0.7,
     });
 
-    // Head - sphere
+    const shirtMat = new THREE.MeshStandardMaterial({
+      color: 0x3b82f6, // Blue shirt
+      emissiveIntensity: 0.0,
+      roughness: 0.8,
+    });
+
+    const pantsMat = new THREE.MeshStandardMaterial({
+      color: 0x475569, // Dark grey pants
+      emissiveIntensity: 0.0,
+      roughness: 0.9,
+    });
+
+    const bagMat = new THREE.MeshStandardMaterial({
+      color: 0x8b5a2b, // Brown leather
+      emissiveIntensity: 0.0,
+      roughness: 0.9,
+    });
+
+    // Store for effects
+    this.animatableMaterials = [skinMat, shirtMat, pantsMat, bagMat];
+    this.bodyMaterial = skinMat; // For backwards compatibility
+
+    // Head
     const headGeo = new THREE.SphereGeometry(0.22, 16, 16);
-    this.head = new THREE.Mesh(headGeo, this.bodyMaterial);
+    this.head = new THREE.Mesh(headGeo, skinMat);
     this.head.position.y = 1.55;
     this.head.castShadow = true;
     group.add(this.head);
 
+    // Explorer Cap
+    const capGeo = new THREE.CylinderGeometry(0.23, 0.23, 0.1, 16);
+    const cap = new THREE.Mesh(capGeo, bagMat);
+    cap.position.y = 1.75;
+    const brimGeo = new THREE.BoxGeometry(0.3, 0.05, 0.4);
+    const brim = new THREE.Mesh(brimGeo, bagMat);
+    brim.position.set(0, -0.05, 0.15);
+    cap.add(brim);
+    group.add(cap);
+
     // Neck
     const neckGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.15, 8);
-    const neck = new THREE.Mesh(neckGeo, this.bodyMaterial);
+    const neck = new THREE.Mesh(neckGeo, skinMat);
     neck.position.y = 1.35;
     neck.castShadow = true;
     group.add(neck);
 
-    // Torso - tapered cylinder
+    // Torso (Shirt)
     const torsoGeo = new THREE.CylinderGeometry(0.2, 0.16, 0.5, 12);
-    this.torso = new THREE.Mesh(torsoGeo, this.bodyMaterial);
+    this.torso = new THREE.Mesh(torsoGeo, shirtMat);
     this.torso.position.y = 1.0;
     this.torso.castShadow = true;
     group.add(this.torso);
 
-    // Hips
+    // Backpack
+    const backpackGeo = new THREE.BoxGeometry(0.3, 0.35, 0.15);
+    const backpack = new THREE.Mesh(backpackGeo, bagMat);
+    backpack.position.set(0, 1.05, -0.2); // Attached to back
+    backpack.castShadow = true;
+    group.add(backpack);
+
+    // Hips (Pants)
     const hipsGeo = new THREE.CylinderGeometry(0.16, 0.14, 0.2, 12);
-    const hips = new THREE.Mesh(hipsGeo, this.bodyMaterial);
+    const hips = new THREE.Mesh(hipsGeo, pantsMat);
     hips.position.y = 0.65;
     hips.castShadow = true;
     group.add(hips);
 
-    // Left Leg (with pivot point at top for animation)
+    // Legs (Pants)
+    const legGeo = new THREE.CylinderGeometry(0.07, 0.05, 0.5, 8);
+    const footGeo = new THREE.BoxGeometry(0.1, 0.06, 0.15);
+
+    // Left Leg
     const leftLegPivot = new THREE.Group();
     leftLegPivot.position.set(-0.08, 0.55, 0);
-    const legGeo = new THREE.CylinderGeometry(0.07, 0.05, 0.5, 8);
-    this.leftLeg = new THREE.Mesh(legGeo, this.bodyMaterial);
-    this.leftLeg.position.y = -0.25; // Offset from pivot
+    this.leftLeg = new THREE.Mesh(legGeo, pantsMat);
+    this.leftLeg.position.y = -0.25;
     this.leftLeg.castShadow = true;
     leftLegPivot.add(this.leftLeg);
-    group.add(leftLegPivot);
-    this.leftLegPivot = leftLegPivot;
-
-    // Left Foot
-    const footGeo = new THREE.BoxGeometry(0.1, 0.06, 0.15);
-    const leftFoot = new THREE.Mesh(footGeo, this.bodyMaterial);
+    const leftFoot = new THREE.Mesh(footGeo, bagMat);
     leftFoot.position.set(0, -0.52, 0.02);
     leftFoot.castShadow = true;
     leftLegPivot.add(leftFoot);
+    group.add(leftLegPivot);
+    this.leftLegPivot = leftLegPivot;
 
     // Right Leg
     const rightLegPivot = new THREE.Group();
     rightLegPivot.position.set(0.08, 0.55, 0);
-    this.rightLeg = new THREE.Mesh(legGeo, this.bodyMaterial);
+    this.rightLeg = new THREE.Mesh(legGeo, pantsMat);
     this.rightLeg.position.y = -0.25;
     this.rightLeg.castShadow = true;
     rightLegPivot.add(this.rightLeg);
-    group.add(rightLegPivot);
-    this.rightLegPivot = rightLegPivot;
-
-    // Right Foot
-    const rightFoot = new THREE.Mesh(footGeo, this.bodyMaterial);
+    const rightFoot = new THREE.Mesh(footGeo, bagMat);
     rightFoot.position.set(0, -0.52, 0.02);
     rightFoot.castShadow = true;
     rightLegPivot.add(rightFoot);
+    group.add(rightLegPivot);
+    this.rightLegPivot = rightLegPivot;
 
-    // Left Arm (with pivot at shoulder)
+    // Arms (Shirt Sleeves + Skin)
+    const armGeo = new THREE.CylinderGeometry(0.045, 0.035, 0.35, 8);
+    const handGeo = new THREE.SphereGeometry(0.05, 8, 8);
+
+    // Left Arm
     const leftArmPivot = new THREE.Group();
     leftArmPivot.position.set(-0.28, 1.2, 0);
-    const armGeo = new THREE.CylinderGeometry(0.045, 0.035, 0.35, 8);
-    this.leftArm = new THREE.Mesh(armGeo, this.bodyMaterial);
+    this.leftArm = new THREE.Mesh(armGeo, shirtMat);
     this.leftArm.position.y = -0.18;
     this.leftArm.castShadow = true;
     leftArmPivot.add(this.leftArm);
-    group.add(leftArmPivot);
-    this.leftArmPivot = leftArmPivot;
-
-    // Left Hand
-    const handGeo = new THREE.SphereGeometry(0.05, 8, 8);
-    const leftHand = new THREE.Mesh(handGeo, this.bodyMaterial);
+    const leftHand = new THREE.Mesh(handGeo, skinMat);
     leftHand.position.set(0, -0.38, 0);
     leftHand.castShadow = true;
     leftArmPivot.add(leftHand);
+    group.add(leftArmPivot);
+    this.leftArmPivot = leftArmPivot;
 
     // Right Arm
     const rightArmPivot = new THREE.Group();
     rightArmPivot.position.set(0.28, 1.2, 0);
-    this.rightArm = new THREE.Mesh(armGeo, this.bodyMaterial);
+    this.rightArm = new THREE.Mesh(armGeo, shirtMat);
     this.rightArm.position.y = -0.18;
     this.rightArm.castShadow = true;
     rightArmPivot.add(this.rightArm);
-    group.add(rightArmPivot);
-    this.rightArmPivot = rightArmPivot;
-
-    // Right Hand
-    const rightHand = new THREE.Mesh(handGeo, this.bodyMaterial);
+    const rightHand = new THREE.Mesh(handGeo, skinMat);
     rightHand.position.set(0, -0.38, 0);
     rightHand.castShadow = true;
     rightArmPivot.add(rightHand);
+    group.add(rightArmPivot);
+    this.rightArmPivot = rightArmPivot;
 
     // No lights attached to player - rely on scene lighting for natural appearance
     this.playerLight = null;
@@ -169,7 +205,8 @@ export class Player {
     this.halo = halo;
 
     // Store material reference on group for compatibility
-    group.material = this.bodyMaterial;
+    // Group does not need this.bodyMaterial directly anymore
+    // group.material = this.bodyMaterial;
 
     // Scale up the player for better visibility
     group.scale.setScalar(1.5);
@@ -332,12 +369,15 @@ export class Player {
 
   /**
    * Set player color (for potions, power-ups, etc.)
+   * Changed to use emissive glow so clothing colors aren't lost
    */
-  setColor(color, emissiveIntensity = 0.2) {
-    if (this.bodyMaterial) {
-      this.bodyMaterial.color.setHex(color);
-      this.bodyMaterial.emissive.setHex(color);
-      this.bodyMaterial.emissiveIntensity = emissiveIntensity;
+  setColor(color, emissiveIntensity = 0.5) {
+    if (this.animatableMaterials) {
+      this.animatableMaterials.forEach((m) => {
+        // Keep original map/color but add a strong emissive glow
+        m.emissive.setHex(color);
+        m.emissiveIntensity = emissiveIntensity;
+      });
     }
     if (this.playerLight) {
       this.playerLight.color.setHex(color);
@@ -348,13 +388,14 @@ export class Player {
   }
 
   /**
-   * Reset to default skin color
+   * Reset to default skin color, removing any emissive overrides
    */
   resetColor() {
-    if (this.bodyMaterial) {
-      this.bodyMaterial.color.setHex(0xffdbac); // Skin tone
-      this.bodyMaterial.emissive.setHex(0x000000);
-      this.bodyMaterial.emissiveIntensity = 0.0;
+    if (this.animatableMaterials) {
+      this.animatableMaterials.forEach((m) => {
+        m.emissive.setHex(0x000000);
+        m.emissiveIntensity = 0.0;
+      });
     }
     if (this.playerLight) {
       this.playerLight.color.setHex(0xffffff);
@@ -368,7 +409,7 @@ export class Player {
    * Activate potion effect (purple glow)
    */
   activatePotionEffect() {
-    this.setColor(0xff00ff, 1.5);
+    this.setColor(0xff00ff, 0.8);
   }
 
   /**
@@ -501,19 +542,17 @@ export class Player {
     requestAnimationFrame(fadeFlash);
 
     // Brief red tint on player
-    const originalColor = this.bodyMaterial.color.getHex();
-    const originalEmissive = this.bodyMaterial.emissive.getHex();
-    const originalEmissiveIntensity = this.bodyMaterial.emissiveIntensity;
-
-    this.bodyMaterial.color.setHex(0xff3333);
-    this.bodyMaterial.emissive.setHex(0xff0000);
-    this.bodyMaterial.emissiveIntensity = 1.0;
+    if (this.animatableMaterials) {
+      this.animatableMaterials.forEach((m) => {
+        // Keep original colors for clothes, just add strong red emission
+        m.emissive.setHex(0xff0000);
+        m.emissiveIntensity = 1.0;
+      });
+    }
 
     // Reset color after brief flash
     setTimeout(() => {
-      this.bodyMaterial.color.setHex(originalColor);
-      this.bodyMaterial.emissive.setHex(originalEmissive);
-      this.bodyMaterial.emissiveIntensity = originalEmissiveIntensity;
+      this.resetColor();
     }, 200);
   }
 
@@ -625,18 +664,24 @@ export class Player {
     };
     requestAnimationFrame(fadeFlash);
 
-    // Make player turn red and fade
-    this.bodyMaterial.color.setHex(0xff0000);
-    this.bodyMaterial.emissive.setHex(0xff0000);
-    this.bodyMaterial.emissiveIntensity = 1.5;
-    this.bodyMaterial.transparent = true;
+    // Make player glow red and fade
+    if (this.animatableMaterials) {
+      this.animatableMaterials.forEach((m) => {
+        // Just add severe emission, keep clothing maps
+        m.emissive.setHex(0xff0000);
+        m.emissiveIntensity = 1.5;
+        m.transparent = true;
+      });
+    }
 
     // Fade out player
     let opacity = 1.0;
     const fadePlayer = () => {
       opacity -= 0.05;
       if (opacity > 0) {
-        this.bodyMaterial.opacity = opacity;
+        if (this.animatableMaterials) {
+          this.animatableMaterials.forEach((m) => (m.opacity = opacity));
+        }
         requestAnimationFrame(fadePlayer);
       }
     };

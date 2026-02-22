@@ -91,24 +91,26 @@ export class ZombieDog {
 
   static getAssets() {
     if (!ZombieDog.assets) {
-      const rottenColor = 0x3d3d2d;
-      const bloodColor = 0x660000;
+      // Hellhound vibe
+      const furColor = 0x1a1a1a; // Very dark grey/black fur
+      const magmaColor = 0xff4500; // Orange-red glowing magma inside
 
       ZombieDog.assets = {
         bodyMat: new THREE.MeshStandardMaterial({
-          color: rottenColor,
-          emissive: 0x111111,
-          emissiveIntensity: 0.15,
-          roughness: 0.85,
+          color: furColor,
+          emissive: 0x050505,
+          emissiveIntensity: 0.1,
+          roughness: 0.9, // Matte fur
+          metalness: 0.0,
         }),
         bloodMat: new THREE.MeshStandardMaterial({
-          color: bloodColor,
-          emissive: 0x220000,
-          emissiveIntensity: 0.2,
-          roughness: 0.7,
+          color: magmaColor,
+          emissive: magmaColor,
+          emissiveIntensity: 0.8, // Glowing inner mouth/wounds
+          roughness: 0.4,
         }),
-        eyeMat: new THREE.MeshBasicMaterial({ color: 0xff0000 }),
-        ribMat: new THREE.MeshStandardMaterial({ color: 0xccccaa }),
+        eyeMat: new THREE.MeshBasicMaterial({ color: 0xffaa00 }), // Glowing orange/yellow eyes
+        ribMat: new THREE.MeshStandardMaterial({ color: 0x333333 }), // Darkened charred bones
 
         // Geometries
         bodyGeo: new THREE.BoxGeometry(0.5, 0.35, 0.9),
@@ -126,9 +128,9 @@ export class ZombieDog {
       canvas.height = 64;
       const context = canvas.getContext("2d");
       const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
-      gradient.addColorStop(0, "rgba(255, 200, 200, 1)");
-      gradient.addColorStop(0.2, "rgba(255, 0, 0, 1)");
-      gradient.addColorStop(0.5, "rgba(100, 0, 0, 0.4)");
+      gradient.addColorStop(0, "rgba(255, 200, 100, 1)"); // Bright yellow center
+      gradient.addColorStop(0.3, "rgba(255, 100, 0, 0.8)"); // Orange mid
+      gradient.addColorStop(0.7, "rgba(150, 20, 0, 0.4)"); // Dark red outer
       gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
       context.fillStyle = gradient;
       context.fillRect(0, 0, 64, 64);

@@ -92,7 +92,7 @@ export class WorldGenerator {
     this.game.scene.add(new THREE.AmbientLight(0xffffff, 2.2));
 
     // Bright directional sun light
-    const sun = new THREE.DirectionalLight(0xffffff, 2.5);
+    const sun = new THREE.DirectionalLight(0xfffaed, 2.8); // Slightly warmer and brighter sun
     sun.position.set(50, 100, 50);
     sun.castShadow = true;
     sun.shadow.camera.left = -100;
@@ -125,11 +125,11 @@ export class WorldGenerator {
         continue;
       verts[i + 2] = Math.random() * 0.5;
     }
-    // Changed to Lighter Earth Tone and removed Metalness
+    // Use a stylized checkered grass pattern or just a richer multi-tonal ground
     const mat = new THREE.MeshStandardMaterial({
-      color: 0x4e8a46, // Richer Green (More saturation, less pale)
-      roughness: 1.0, // Fully matte (absorbs/scatters light evenly)
-      metalness: 0.0, // REMOVED METALNESS - caused black look
+      color: 0x558b2f, // Lighter, brighter grass green
+      roughness: 0.8, // Slightly less rough so it catches some light
+      metalness: 0.0,
       flatShading: true,
     });
     this.ground = new THREE.Mesh(geo, mat);
@@ -137,7 +137,7 @@ export class WorldGenerator {
     this.ground.receiveShadow = true;
     this.game.scene.add(this.ground);
 
-    // Add distant mountains
+    // Decorate environment
     this.createMountains();
   }
 

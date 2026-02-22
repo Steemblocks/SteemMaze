@@ -58,6 +58,3 @@ coverage/
 *.local
 *.local.js
 !public/steem-config.local.js
-
-# Gemini agent files (optional - remove if you want to track these)
-# .agent/
