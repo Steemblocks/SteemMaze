@@ -1,12 +1,12 @@
 # Stage 1: Build the application
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
 # Install dependencies (git required for github dependencies)
 RUN apk add --no-cache git
 
-COPY package.json ./
+COPY package*.json ./
 RUN npm install
 
 # Copy source code
