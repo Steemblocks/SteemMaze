@@ -24,6 +24,7 @@ export class GameData {
       totalCoins: 0,
       totalZombiesPurified: 0,
       achievements: [],
+      history: [], // Record of completed games (finished level 10)
       settings: {
         mazeSize: 15,
         cameraSpeed: 5,
@@ -108,7 +109,7 @@ export class GameData {
       this.data.losses = s.losses || 0;
       this.data.bestScore = s.best_score || 0;
       this.data.highestLevel = s.highest_level ?? 1;
-      this.data.currentLevel = this.data.highestLevel + 1;
+      this.data.currentLevel = Math.min(10, this.data.highestLevel + 1);
       this.data.totalCoins = s.total_coins || 0;
       this.data.totalZombiesPurified = s.total_zombies_purified || 0;
       this.data.totalSteps = s.total_steps || 0;
@@ -160,7 +161,7 @@ export class GameData {
     this.data.bestScore = updatedStats.bestScore;
     this.data.totalSteps = updatedStats.totalSteps;
     this.data.highestLevel = updatedStats.highestLevel;
-    this.data.currentLevel = this.data.highestLevel + 1;
+    this.data.currentLevel = Math.min(10, this.data.highestLevel + 1);
     this.data.bestTime = updatedStats.bestTime;
 
     this.save();

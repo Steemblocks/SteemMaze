@@ -737,7 +737,53 @@
             </div>
           </div>
 
+          <div id="gameEndScreen" class="overlay">
+            <div
+              class="game-over-panel"
+              style="
+                background: linear-gradient(
+                  135deg,
+                  rgba(30, 41, 59, 0.9),
+                  rgba(15, 23, 42, 0.95)
+                );
+                border: 2px solid var(--primary);
+              "
+            >
+              <div class="game-over-icon" style="color: var(--primary)">
+                <span class="material-icons-round">emoji_events</span>
+              </div>
+              <h2 style="color: var(--primary); font-size: 2.5rem">
+                GAME COMPLETED!
+              </h2>
+              <p
+                class="game-over-message"
+                style="font-size: 1.2rem; margin-bottom: 2rem"
+              >
+                Congratulations! You have successfully navigated all 10 levels
+                of the Enchanted Garden Maze!
+              </p>
+              <div class="game-over-stats">
+                <div class="game-over-stat">
+                  <span class="material-icons-round">star</span>
+                  <span id="finalTotalScore">0</span>
+                  <span>Total Score</span>
+                </div>
+              </div>
+              <div class="game-over-buttons">
+                <button class="menu-btn primary" id="playAgainBtn">
+                  <span class="material-icons-round">play_arrow</span>
+                  <span>Play Again</span>
+                </button>
+                <button class="menu-btn" id="mainMenuBtn">
+                  <span class="material-icons-round">home</span>
+                  <span>Main Menu</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Shop Sidebar -->
+
           <div id="shopSidebar" class="sidebar-overlay">
             <div class="sidebar-panel">
               <div class="sidebar-header">
@@ -870,9 +916,14 @@
               ><span id="profileTotalCoins">0</span><span>Total Coins</span>
             </div>
             <div class="profile-stat red">
-              <span class="material-icons-round">auto_fix_high</span
-              ><span id="profileZombiesPurified">0</span
-              ><span>Zombies Purified</span>
+              <span class="material-icons-round">auto_fix_high</span>
+              <span id="profileZombiesPurified">0</span>
+              <span>Zombies Purified</span>
+            </div>
+            <div class="profile-stat green">
+              <span class="material-icons-round">emoji_events</span>
+              <span id="profileCompletions">0</span>
+              <span>Completions</span>
             </div>
           </div>
           <div class="achievements-section">
@@ -881,6 +932,13 @@
               Achievements
             </h3>
             <div id="achievementsGrid" class="achievements-grid"></div>
+          </div>
+          <div class="achievements-section history-section">
+            <h3>
+              <span class="material-icons-round">history</span>
+              Game Completion History
+            </h3>
+            <div id="gameHistoryList" class="history-list"></div>
           </div>
           <div class="blockchain-section">
             <div class="section-title-clean">

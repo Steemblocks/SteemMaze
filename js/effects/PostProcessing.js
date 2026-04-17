@@ -568,7 +568,7 @@ export class ScreenEffectsManager {
       pointer-events: none;
       opacity: 0;
       z-index: 1000;
-      transition: opacity 0.1s ease-out;
+      transition: opacity 0.15s ease-out;
     `;
     document.body.appendChild(this.flashOverlay);
   }
@@ -581,7 +581,15 @@ export class ScreenEffectsManager {
 
   // Screen flash effect (damage, collect, etc.)
   flash(color = "#ff0000", intensity = 0.4, duration = 150) {
-    this.flashOverlay.style.backgroundColor = color;
+    // Handle hex numbers
+    let colorStr = color;
+    if (typeof color === "number") {
+      colorStr = "#" + color.toString(16).padStart(6, "0");
+    }
+
+    // Use a radial gradient for a "vignette" flash instead of solid color
+    // This is much less annoying as it leaves the center of the screen clear
+    this.flashOverlay.style.background = `radial-gradient(circle, transparent 30%, ${colorStr} 150%)`;
     this.flashOverlay.style.opacity = intensity;
 
     setTimeout(() => {
@@ -615,11 +623,11 @@ export class ScreenEffectsManager {
 
   // Positive feedback flash (green for collect, gold for level up)
   collectFlash() {
-    this.flash("#4ade80", 0.2, 100);
+    this.flash("#4ade80", 0.12, 100);
   }
 
   damageFlash() {
-    this.flash("#ef4444", 0.35, 150);
+    this.flash("#ef4444", 0.25, 150);
     this.shake(8, 200);
   }
 
@@ -629,7 +637,7 @@ export class ScreenEffectsManager {
       speed: "#fbbf24",
       freeze: "#06b6d4",
     };
-    this.flash(colors[type] || "#a855f7", 0.25, 120);
+    this.flash(colors[type] || "#a855f7", 0.18, 120);
   }
 
   dispose() {

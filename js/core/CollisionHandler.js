@@ -28,10 +28,7 @@ export class CollisionHandler {
     this.game.cameraShake = GameRules.SHAKE_INTENSITY_WALL;
 
     // Vibration feedback (stronger for wall hit)
-    if (
-      this.game.gameData.getSetting("vibration") &&
-      navigator.vibrate
-    ) {
+    if (this.game.gameData.getSetting("vibration") && navigator.vibrate) {
       navigator.vibrate(GameRules.VIBRATION_WALL);
     }
   }
@@ -72,10 +69,7 @@ export class CollisionHandler {
 
       this.game.cameraShake = 0.5;
 
-      if (
-        this.game.gameData.getSetting("vibration") &&
-        navigator.vibrate
-      ) {
+      if (this.game.gameData.getSetting("vibration") && navigator.vibrate) {
         navigator.vibrate([30, 30, 30]);
       }
       return; // Shield consumed, no damage
@@ -98,15 +92,12 @@ export class CollisionHandler {
     this.game.cameraShake = GameRules.SHAKE_INTENSITY_ZOMBIE;
 
     // Vibration feedback (strong vibration for zombie hit)
-    if (
-      this.game.gameData.getSetting("vibration") &&
-      navigator.vibrate
-    ) {
+    if (this.game.gameData.getSetting("vibration") && navigator.vibrate) {
       navigator.vibrate(GameRules.VIBRATION_ZOMBIE);
     }
 
     // Flash screen red
-    this.game.uiUpdater.flashScreen("rgba(239, 68, 68, 0.7)", 250);
+    this.game.uiUpdater.flashScreen("rgba(239, 68, 68, 0.45)", 250);
 
     // Update lives display
     this.game.updateLivesDisplay();
@@ -132,7 +123,10 @@ export class CollisionHandler {
       }
 
       // Reset player position to start
-      this.game.playerPos = { x: this.game.MAZE_SIZE - 1, z: this.game.MAZE_SIZE - 1 };
+      this.game.playerPos = {
+        x: this.game.MAZE_SIZE - 1,
+        z: this.game.MAZE_SIZE - 1,
+      };
       this.game.entityManager.playerPos = { ...this.game.playerPos }; // Sync with EntityManager
       this.game.entityManager.updatePlayerPosition();
 
@@ -175,7 +169,15 @@ export class CollisionHandler {
         // to ensure they are far from bottom-right start
         entity.gridX = Math.floor(Math.random() * (this.game.MAZE_SIZE / 2));
         entity.gridZ = Math.floor(Math.random() * (this.game.MAZE_SIZE / 2));
-        entity.updatePosition();
+        if (typeof entity.updatePosition === "function") {
+          entity.updatePosition();
+        } else if (typeof entity.updateTargetPosition === "function") {
+          entity.updateTargetPosition();
+          // Force snap mesh position if it does smooth interpolation
+          if (entity.mesh && entity.targetPos) {
+            entity.mesh.position.copy(entity.targetPos);
+          }
+        }
       }
     };
 

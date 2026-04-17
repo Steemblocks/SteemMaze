@@ -411,7 +411,8 @@
 .achievements-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 10px;
+  margin-bottom: 32px;
 }
 
 .achievement {
@@ -444,10 +445,13 @@
   color: var(--text-dim);
 }
 
-/* Blockchain Section Redesign */
+.history-section {
+  margin-top: 40px !important;
+}
+
 .blockchain-section {
-  margin-top: 24px;
-  padding-top: 20px;
+  margin-top: 40px;
+  padding-top: 24px;
   border-top: 1px dashed var(--glass-border);
 }
 

@@ -51,9 +51,10 @@ export class GameStateManager {
     this.game.totalCoins = 0;
 
     // COMPLETE RESET of game state
-    // We must PRESERVE the login session though!
+    // We must PRESERVE the login session AND game history though!
     const savedSteemUser = this.game.gameData.get("steemUsername");
     const savedPlayerName = this.game.gameData.get("playerName");
+    const savedHistory = this.game.gameData.get("history"); // CRITICAL: Preserve history
 
     // Reset all persistent data
     this.game.gameData.reset(); // Resets to default (Level 1, 0 Coins, etc.)
@@ -65,6 +66,12 @@ export class GameStateManager {
     if (savedPlayerName) {
       this.game.gameData.set("playerName", savedPlayerName);
     }
+    
+    // CRITICAL: Restore game completion history - this should NEVER be reset
+    // Players' achievements history is permanent!
+    if (savedHistory && Array.isArray(savedHistory)) {
+      this.game.gameData.set("history", savedHistory);
+    }
 
     // If connected, keep the blockchain connection sync
     if (steemIntegration?.isConnected && steemIntegration?.username) {
@@ -72,6 +79,36 @@ export class GameStateManager {
         "Started fresh game (Session preserved)",
         "restart_alt",
       );
+      
+      // CRITICAL: Post reset record to blockchain so data stays in sync
+      // Without this, blockchain shows old level 10 completion while local is level 1
+      try {
+        const resetRecord = {
+          level: 1,
+          score: 0,
+          time: 0,
+          moves: 0,
+          gems: 0,
+          totalGems: 0,
+          stars: 0,
+          mazeSize: 15,
+          gamesPlayed: 0,
+          wins: 0,
+          losses: 0,
+          totalCoins: 0,
+          totalZombiesPurified: 0,
+          totalSteps: 0,
+          highestLevel: 0,
+          bestScore: 0,
+          achievements: [],
+        };
+        
+        await steemIntegration.postGameRecord(resetRecord);
+        // Don't show extra toast - already showing "Started fresh game"
+      } catch (error) {
+        console.warn("Failed to sync reset to blockchain (continuing):", error);
+        // Continue anyway - local data is more important
+      }
     }
 
     this.game.gameData.set("currentLevel", this.level);
@@ -85,6 +122,10 @@ export class GameStateManager {
     this.game.gameData.data.gamesPlayed++;
     this.game.gameData.save();
     this.game.resetGame();
+    
+    // Ensure gameScreen is displayed after setup
+    this.game.ui.showScreen("gameScreen");
+    this.game.isRunning = true;
   }
 
   /**
@@ -122,13 +163,67 @@ export class GameStateManager {
     // This prevents the next level starting before the record is in the queue
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    // Advancing Logic: Loop back to Level 1 after Level 10
+    // Advancing Logic: Show Game End Screen after completing Level 10
     if (this.level >= 10) {
+      // 1. Record Full Game Completion in History with Rich Data
+      const history = this.game.gameData.get("history") || [];
+      const totalScore = this.game.gameData.get("bestScore") || 0;
+      const d = this.game.gameData.data;
+      
+      // Get currently unlocked achievements
+      const { getUnlockedAchievements } = await import("../core/Achievements.js");
+      const unlockedAchievements = getUnlockedAchievements(d).map(a => ({
+        id: a.id,
+        name: a.name,
+        icon: a.icon
+      }));
+      
+      const completionRecord = {
+        timestamp: new Date().toISOString(),
+        score: totalScore,
+        levelReached: this.level,
+        status: "Completed",
+        date: new Date().toLocaleDateString(),
+        completionType: "FULL_GAME_COMPLETION", // NEW: Mark as full game completion
+        totalGameTime: this.game.time, // NEW: Total time to complete all 10 levels
+        totalMoves: d.totalSteps, // NEW: Cumulative moves across game
+        achievementsUnlocked: unlockedAchievements, // NEW: Achievements at completion
+        difficultySettings: {
+          mazeSize: this.game.gameData.getSetting("mazeSize") || 15,
+          quality: this.game.gameData.getSetting("quality") || "high"
+        }
+      };
+      
+      history.push(completionRecord);
+      this.game.gameData.set("history", history);
+      
+      // 2. Reset progress for next run but keep higher difficulty or stats
+      this.game.gameData.set("currentLevel", 1);
       this.level = 1;
+      this.game.level = this.level; // Sync with Game class
+
+      // Show Final Completion Screen
+      this.game.ui.showGameEndScreen(totalScore);
+      
       this.game.ui.showToast(
-        "🏆 Game Completed! Restarting...",
+        "🏆 All Levels Completed! Congratulations!",
         "emoji_events",
       );
+      
+      // Update UI displays to reflect reset
+      document.getElementById("levelDisplay").textContent = "1";
+      this.game.ui.updateMenuStats();
+      
+      // CRITICAL: Properly clean up and reset the game after showing end screen
+      // This allows players to immediately start a new game or return to menu
+      // without a broken game state
+      this.game.cleanup();
+      
+      // CRITICAL: Save the reset level to persistent storage
+      // Without this, the level 10 completion data persists in localStorage
+      this.game.gameData.save();
+      
+      return; // Exit early
     } else {
       this.level++;
     }

@@ -358,9 +358,9 @@ export class ScoringSystem {
     if (this.game.level > d.highestLevel) {
       d.highestLevel = this.game.level;
     }
-    // Always unlock next level if we beat the current one
+    // Always unlock next level if we beat the current one, capped at 10
     if ((d.currentLevel || 1) <= this.game.level) {
-      d.currentLevel = this.game.level + 1;
+      d.currentLevel = Math.min(10, this.game.level + 1);
     }
 
     const isNewRecord = !d.bestScore || score > d.bestScore;
@@ -434,6 +434,22 @@ export class ScoringSystem {
           highestLevel: d.highestLevel,
           bestScore: d.bestScore,
           achievements: getUnlockedAchievements(d).map((a) => a.id),
+          
+          // NEW: Full Game Completion Metadata
+          // When player completes level 10, mark as special achievement on blockchain
+          ...(this.game.level >= 10 && {
+            completionType: "FULL_GAME",
+            completionTimestamp: new Date().toISOString(),
+            totalGameTime: d.totalSteps ? Math.round((d.bestTime || 0) * 1.5) : 0, // Estimate based on best level time
+            achievementCount: getUnlockedAchievements(d).length,
+            completionStats: {
+              totalWins: d.wins,
+              totalCoins: d.totalCoins,
+              totalZombiesDefeated: d.totalZombiesPurified,
+              totalDistance: d.totalSteps * 1.5, // Rough estimate: each step ~1.5 units
+              maxCombo: this.maxCombo || 0
+            }
+          })
         };
 
         // CRITICAL FIX: Await the postGameRecord promise to ensure it broadcasts

@@ -1,128 +1,123 @@
 # SteemMaze
 
-SteemMaze is a web-based 3D maze exploration game integrated with the Steem blockchain. Players navigate through procedurally generated mazes, avoid enemies, collect gems, and can save their progress and achievements directly to the Steem blockchain.
+SteemMaze is a high-performance, web-based 3D maze exploration game deeply integrated with the Steem blockchain. Players navigate through procedurally generated, aesthetically rich 3D garden environments, overcoming various entities, collecting rewards, and securing their achievements on the blockchain.
 
-<img width="1365" height="632" alt="image" src="https://github.com/user-attachments/assets/42ce5c11-6929-4c84-92cd-9ac60d715b2a" />
+<img width="1365" height="632" alt="SteemMaze Gameplay" src="https://github.com/user-attachments/assets/42ce5c11-6929-4c84-92cd-9ac60d715b2a" />
 
-## Features
+## Key Features
 
-- **3D Gameplay**: Immersive 3D environment built with Three.js, featuring dynamic lighting, fog, and procedurally generated terrain.
-- **Blockchain Integration**:
-  - Secure login using Steem Keychain.
-  - Sync game progress across devices using blockchain storage.
-  - Post game achievements and level completions to your Steem blog.
-  - Global leaderboard system based on blockchain data.
-- **Dynamic Environment**:
-  - Day/Night cycle affecting visibility.
-  - Procedural placement of obstacles, enemies (zombies), and collectibles.
-  - Varied terrain with mountains and atmospheric effects.
-- **Progression System**:
-  - Multiple levels with increasing difficulty.
-  - Inventory system for collected gems and coins.
-  - Player statistics tracking (wins, losses, steps taken).
+-   **Immersive 3D Engine**: Built with **Three.js**, featuring dynamic lighting, volumetric fog, and procedurally generated terrain and maze structures.
+-   **Blockchain Ecosystem**:
+    -   **Secure Authentication**: One-click login via **Steem Keychain**.
+    -   **Persistent Progress**: Sync your level progress, inventory, and stats directly to the Steem blockchain.
+    -   **Global Leaderboards**: Competitive rankings driven by immutable blockchain records.
+    -   **Social Integration**: Share your level completions and high scores directly to your Steem blog.
+-   **Advanced Gameplay Mechanics**:
+    -   **10 Challenging Levels**: Each level increases in complexity and introduces new hazards.
+    -   **Dynamic Shop System**: Collect coins to purchase essential items like Light Bursts, Potions, and Fog Removers.
+    -   **Combo Multiplier**: Reward for continuous movement, boosting scores up to 2.0x.
+    -   **Day/Night Cycle**: Real-time atmospheric shifts that impact visibility and entity behavior.
+
+## Entities and Hazards
+
+| Entity | Description | Behavior | Reward |
+| :--- | :--- | :--- | :--- |
+| **Zombie** | Basic undead | Slow moving, predictable | 100+ Pts |
+| **Hell Hound** | Fast stalker | High speed chaser, requires agile movement | 200+ Pts |
+| **Monster** | Common threat | Standard patrolling enemy | 50 Pts |
+| **Fallen Angel** | Mini-Boss | Surrounded by a Crimson Aura, strikes from range | 150 Pts |
+| **Bigfoot Boss**| The Ultimate Apex | Massive, relentless, and deadly. Found in later levels | 500 Pts |
+
+## Scoring and Progression
+
+The game rewards skill, speed, and thorough exploration.
+
+-   **Gems**: 75 Pts per collection.
+-   **Zombies Eliminated**: 100+ Pts (requires Potion).
+-   **Level Completion**: 100+ Pts (scales with level).
+-   **Combo System**:
+    -   8 Steps: 1.05x Multiplier
+    -   25 Steps: 1.30x Multiplier
+    -   60 Steps: 2.00x Multiplier
+-   **Penalties**: Hitting walls reduces score by 75 Pts.
 
 ## Technology Stack
 
-- **Frontend**: HTML5, Vanilla JavaScript, CSS3
-- **3D Engine**: Three.js
-- **Build Tool**: Vite
-- **Blockchain**: Steem.js, Steem Keychain Integration
+-   **Engine**: Three.js (v0.160.0)
+-   **Development**: Vite (v7.3.1)
+-   **Blockchain**: Steem.js (@steemit/steem-js)
+-   **Styling**: Vanilla CSS (Post-modern/Glassmorphism aesthetic)
+-   **Fonts**: Outfit (Google Fonts), Material Icons Round
 
-## Prerequisites
+## Getting Started
 
-- Node.js (v14.0.0 or higher)
-- npm (Node Package Manager)
-- Steem Keychain browser extension (required for login and blockchain interactions)
+### Prerequisites
 
-## Installation
+-   Node.js (v18.0.0 or higher recommended)
+-   npm or yarn
+-   [Steem Keychain](https://chrome.google.com/webstore/detail/steem-keychain/lkocmhepmocadocglhkbgphlmelocpjo) browser extension
 
-1. Clone the repository:
+### Installation
 
-   ```bash
-   git clone https://github.com/yourusername/steem-maze.git
-   cd steem-maze
-   ```
+1.  **Clone the Repository**
+    ```bash
+    git clone https://github.com/yourusername/steem-maze.git
+    cd steem-maze
+    ```
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+2.  **Install Dependencies**
+    ```bash
+    npm install
+    ```
 
-## Configuration
+### Configuration
 
-Security is a priority. This project uses environment variables and local configuration files to manage sensitive data.
+The simplest way to configure the Steem storage account is by editing the `js/steem/steem.js` file directly.
 
-1. **Environment Setup**:
-   Copy the example environment file:
+1.  Open `js/steem/steem.js`.
+2.  Locate the `STEEM_SYSTEM_ACCOUNT` object at the top of the file:
+    ```javascript
+    const STEEM_SYSTEM_ACCOUNT = {
+      username: "yoursteemid",        // Enter your Steem ID here
+      postingKey: "yourprivatekey",     // Enter your Private Posting Key here
+    };
+    ```
+3.  Enter your **Steem ID** and **Private Posting Key**.
 
-   ```bash
-   copy .env.example .env
-   ```
+This account handles automatic game record storage and global player lists. Note that regular players do not need keys here; they simply log in with the **Steem Keychain** browser extension.
 
-2. **Local Config**:
-   The configuration file is located at `public/steem-config.local.js`. This file is tracked by Git, but sensitive keys should be replaced with placeholders before committing.
+---
 
-3. **Edit Configuration**:
-   Open `public/steem-config.local.js` and update the settings as needed.
-   _Note: Be careful not to commit your actual private posting keys! Replace them with placeholders before pushing to the server._
+### Development
 
-## Running the Application
-
-To start the development server:
-
+Run the local development server:
 ```bash
 npm run dev
 ```
+The application will be served at `http://localhost:5173`.
 
-The application will be available at `http://localhost:5173` (or the port shown in your terminal).
+## Deployment
 
-## Building for Production
-
-To create a production-ready build:
-
+### Production Build
 ```bash
 npm run build
 ```
+This generates a highly optimized `dist/` directory ready for any static hosting or Docker deployment.
 
-The output files will be generated in the `dist/` directory.
+### Docker Deployment
+The project includes a `Dockerfile` optimized for reverse proxy setups.
 
-## Docker Deployment for maze.steemblocks.com
-
-Since you are running multiple containers on your server, we will run the app on a specific port (e.g., **8081**) and use your main Nginx to proxy traffic to it.
-
-1. **Build the Docker Image**:
-
-   ```bash
-   docker build -t steem-maze .
-   ```
-
-2. **Run the Container**:
-
-   ```bash
-   docker run -d -p 8081:80 --name steem-maze --restart always steem-maze
-   ```
-
-3. **Configure Host Nginx (Reverse Proxy)**:
-   You need to configure your server's main Nginx to forward `maze.steemblocks.com` to port `8081`.
-
-   See `host_nginx_example.conf` for a configuration snippet.
-
-   After updating your host config:
-
-   ```bash
-   sudo nginx -t
-   sudo systemctl reload nginx
-   ```
-
-   The app will be accessible at: `http://maze.steemblocks.com`
+1.  **Build**: `docker build -t steem-maze .`
+2.  **Run**: `docker run -d -p 8081:80 --name steem-maze --restart always steem-maze`
 
 ## Project Structure
 
-- `js/`: Core application logic (Game engine, UI, Steem integration).
-- `public/`: Static assets (3D models, textures, sounds).
-- `dist/`: Compiled production build.
-- `steem-integration.js`: Main module handling Steem blockchain interactions.
+-   `js/`: Core application modules (Game engine, UI, Steem integration).
+-   `styles/`: CSS modules for UI and layout.
+-   `public/`: Static assets, textures, and 3D models.
+-   `steem-integration.js`: High-level wrapper for blockchain operations.
+-   `animation-cache.js`: Optimized caching for 3D model animations.
 
 ## License
 
-This project is licensed under the MIT License.
+Distributed under the MIT License. See `LICENSE` for more information.

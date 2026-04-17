@@ -20,27 +20,31 @@ const STEEM_NODES = {
 };
 
 // ============================================
-// PLAYER REGISTRY CONFIGURATION
+// SYSTEM ACCOUNT CONFIGURATION
 // ============================================
+// This account is used to auto-save game results and player lists.
+// Enter the system account username and its POSTING Private Key below.
+const STEEM_SYSTEM_ACCOUNT = {
+  username: "steemmaze",
+  postingKey: "Your_Posting_key",
+};
+
 const PLAYER_REGISTRY_CONFIG = {
-  account: "steemmaze",
-  postingKey: "YOUR_POSTING_KEY_HERE",
+  account: STEEM_SYSTEM_ACCOUNT.username,
+  postingKey: STEEM_SYSTEM_ACCOUNT.postingKey,
   broadcastInterval: 60 * 60 * 1000, // 1 hour
   jsonId: "steemmaze_players",
 };
 
-// ============================================
-// GAME RECORDS CONFIGURATION
-// ============================================
 const GAME_RECORDS_CONFIG = {
-  account: "steemmaze",
-  postingKey: "YOUR_POSTING_KEY_HERE",
+  account: STEEM_SYSTEM_ACCOUNT.username,
+  postingKey: STEEM_SYSTEM_ACCOUNT.postingKey,
   broadcastInterval: 5 * 60 * 1000, // 5 minutes
   jsonId: "steemmaze_game_record",
 };
 
 /**
- * SteemConfig - Centralized configuration management
+ * SteemConfig - Basic configuration management
  */
 export class SteemConfig {
   constructor() {
@@ -75,17 +79,13 @@ export class SteemConfig {
    */
   setNode(nodeName) {
     if (nodeName === "custom") {
-      if (!this.customNode) {
-        console.warn("No custom node set");
-        return false;
-      }
+      if (!this.customNode) return false;
       this.currentNode = "custom";
       this.currentNodeUrl = this.customNode;
     } else if (STEEM_NODES[nodeName]) {
       this.currentNode = nodeName;
       this.currentNodeUrl = STEEM_NODES[nodeName];
     } else {
-      console.error("Unknown node:", nodeName);
       return false;
     }
     localStorage.setItem(
@@ -94,7 +94,6 @@ export class SteemConfig {
         ? `custom:${this.customNode}`
         : this.currentNode,
     );
-
     return true;
   }
 
@@ -102,17 +101,13 @@ export class SteemConfig {
    * Add or update a custom node
    */
   setCustomNode(nodeUrl) {
-    if (!nodeUrl || !nodeUrl.startsWith("http")) {
-      console.error("Invalid node URL");
-      return false;
-    }
+    if (!nodeUrl || !nodeUrl.startsWith("http")) return false;
     this.customNode = nodeUrl;
-    this.setNode("custom");
-    return true;
+    return this.setNode("custom");
   }
 
   /**
-   * Get list of available nodes
+   * Get list of available nodes for UI
    */
   getAvailableNodes() {
     return {
@@ -151,143 +146,8 @@ export class SteemConfig {
     this.isConnected = false;
   }
 
-  /**   * Load credentials from external steem-config.local.js
-   * This is the preferred way to load credentials
-   *
-   * Usage:
-   *   const config = await steemConfig.loadFromConfigFile();
-   *   console.log(config.gameAccount.username); // 'steemmaze'
-   */
-  async loadFromConfigFile() {
-    try {
-      // Try to import the local config file
-      // Note: This will only work if steem-config.local.js exists in the root
-      // Try to fetch the config file from the root directory
-      // This method avoids build-time import resolution issues
-      const response = await fetch("/steem-config.local.js");
-
-      if (!response.ok) {
-        console.warn(
-          "⚠ steem-config.local.js not found (will use environment variables)",
-        );
-        return null;
-      }
-
-      const text = await response.text();
-
-      // Create a module from the text and evaluate it
-      const blob = new Blob([text], { type: "application/javascript" });
-      const moduleUrl = URL.createObjectURL(blob);
-      const module = await import(/* @vite-ignore */ moduleUrl);
-      const externalConfig = module.steemConfig;
-
-      URL.revokeObjectURL(moduleUrl);
-
-      if (externalConfig) {
-        // Store the external config for later use
-        this.externalConfig = externalConfig;
-
-        // 1. Set GAME ACCOUNT keys (the primary purpose of this file now)
-        if (
-          externalConfig.gameAccount?.postingKey &&
-          !externalConfig.gameAccount.postingKey.includes("YOUR_")
-        ) {
-          // Use this ONE key for BOTH registry and game records
-          const key = externalConfig.gameAccount.postingKey;
-          const account = externalConfig.gameAccount.username || "steemmaze";
-
-          this.setPlayerRegistryKey(key);
-          this.setGameRecordsKey(key);
-
-          // Also allow overriding the account name if needed
-          PLAYER_REGISTRY_CONFIG.account = account;
-          GAME_RECORDS_CONFIG.account = account;
-        }
-
-        // 2. Set node preferences if available
-        if (
-          externalConfig.node?.default &&
-          externalConfig.node.default in STEEM_NODES
-        ) {
-          this.setNode(externalConfig.node.default);
-        }
-        if (externalConfig.node?.custom) {
-          this.setCustomNode(externalConfig.node.custom);
-        }
-
-        console.log("✓ Steem configuration loaded from steem-config.local.js");
-        return externalConfig;
-      }
-    } catch (error) {
-      // Silently fail if file not found or other errors
-      // This is expected in production or if file doesn't exist
-      if (import.meta.env.DEV) {
-        console.debug(
-          "Note: steem-config.local.js not available -",
-          error.message,
-        );
-      }
-      return null;
-    }
-  }
-
   /**
-   * Load credentials from environment variables
-   * Preferred for production deployments
-   *
-   * Supported env vars:
-   *   VITE_STEEM_USERNAME - Your Steem username
-   *   VITE_STEEM_POSTING_KEY - Your posting private key
-   *   VITE_STEEM_REGISTRY_KEY - Registry posting key
-   *   VITE_STEEM_GAME_RECORDS_KEY - Game records posting key
-   *   VITE_STEEM_NODE - Default Steem node
-   *
-   * Usage:
-   *   steemConfig.loadFromEnv();
-   */
-  loadFromEnv() {
-    const env = import.meta.env;
-
-    // Legacy support for specific registry key env var
-    if (env?.VITE_STEEM_REGISTRY_KEY) {
-      this.setPlayerRegistryKey(env.VITE_STEEM_REGISTRY_KEY);
-    }
-
-    // Legacy support for specific game records key env var
-    if (env?.VITE_STEEM_GAME_RECORDS_KEY) {
-      this.setGameRecordsKey(env.VITE_STEEM_GAME_RECORDS_KEY);
-    }
-
-    // Simplfied Env Var: VITE_STEEMMAZE_KEY (overrides both)
-    if (env?.VITE_STEEMMAZE_KEY) {
-      this.setPlayerRegistryKey(env.VITE_STEEMMAZE_KEY);
-      this.setGameRecordsKey(env.VITE_STEEMMAZE_KEY);
-    }
-
-    if (env?.VITE_STEEM_NODE && env.VITE_STEEM_NODE in STEEM_NODES) {
-      this.setNode(env.VITE_STEEM_NODE);
-    }
-
-    if (env?.VITE_STEEMMAZE_KEY || env?.VITE_STEEM_REGISTRY_KEY) {
-      console.log("✓ Steem configuration loaded from environment variables");
-    }
-  }
-
-  /**
-   * Get full credentials object
-   * Returns all loaded credentials in one object
-   */
-  getCredentials() {
-    return {
-      username: this.username,
-      registryConfig: this.getPlayerRegistryConfig(),
-      gameRecordsConfig: this.getGameRecordsConfig(),
-      nodeUrl: this.currentNodeUrl,
-      node: this.currentNode,
-    };
-  }
-
-  /**   * Get player registry configuration
+   * Get player registry configuration
    */
   getPlayerRegistryConfig() {
     return { ...PLAYER_REGISTRY_CONFIG };
@@ -301,35 +161,22 @@ export class SteemConfig {
   }
 
   /**
-   * Update player registry posting key (from config or env)
+   * Check if system account is configured
    */
-  setPlayerRegistryKey(key) {
-    PLAYER_REGISTRY_CONFIG.postingKey = key;
-  }
-
-  /**
-   * Update game records posting key (from config or env)
-   */
-  setGameRecordsKey(key) {
-    GAME_RECORDS_CONFIG.postingKey = key;
-  }
-
-  /**
-   * Check if player registry is configured
-   */
-  isPlayerRegistryConfigured() {
+  isConfigured() {
     return PLAYER_REGISTRY_CONFIG.postingKey !== "YOUR_POSTING_KEY_HERE";
   }
 
-  /**
-   * Check if game records is configured
-   */
+  isPlayerRegistryConfigured() {
+    return this.isConfigured();
+  }
+
   isGameRecordsConfigured() {
-    return GAME_RECORDS_CONFIG.postingKey !== "YOUR_POSTING_KEY_HERE";
+    return this.isConfigured();
   }
 
   /**
-   * Get Steem web URL
+   * Get Steem web URL for links
    */
   getSteemWebUrl() {
     return STEEM_WEB_URL;

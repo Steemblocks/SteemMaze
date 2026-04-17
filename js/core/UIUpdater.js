@@ -286,10 +286,10 @@ export class UIUpdater {
    * @param {string} color - CSS color for the flash
    * @param {number} duration - Duration in milliseconds
    */
-  flashScreen(color = "rgba(239, 68, 68, 0.7)", duration = 250) {
+  flashScreen(color = "rgba(239, 68, 68, 0.45)", duration = 250) {
     const canvas = this.game.canvas;
     if (canvas) {
-      canvas.style.boxShadow = `inset 0 0 100px ${color}`;
+      canvas.style.boxShadow = `inset 0 0 150px ${color}`;
       setTimeout(() => (canvas.style.boxShadow = "none"), duration);
     }
   }

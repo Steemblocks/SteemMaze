@@ -235,7 +235,7 @@ export class BossZombie {
 
   // Legacy loadModel removed
 
-  addBossEffects() {
+  addGlowingEyes(model) {
     // Optimization: Replaced expensive PointLights with Sprites and centralized aura
     // Real-time lights per entity kill performance (3 lights * 6 bosses = 18 extra lights!)
 

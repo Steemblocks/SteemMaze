@@ -150,7 +150,7 @@ export class Shop {
 
       this.game.ui.showToast("Light Burst! Enemies flee!", "light_mode");
       if (this.game.screenEffects) {
-        this.game.screenEffects.flash(0xffd700, 0.3);
+        this.game.screenEffects.flash(0xffd700, 0.15); // Reduced intensity
       }
     } else {
       this.game.ui.showToast("No Light Bursts! Buy from Shop.", "error");
@@ -208,7 +208,7 @@ export class Shop {
 
       // Visual feedback
       if (this.game.screenEffects) {
-        this.game.screenEffects.flash(0xff00ff, 0.4); // Purple flash for activation
+        this.game.screenEffects.flash(0xff00ff, 0.2); // Reduced intensity (Purple flash)
       }
     } else {
       this.game.ui.showToast("No potions! Buy from Shop first.", "error");
@@ -261,7 +261,7 @@ export class Shop {
         "blur_off",
       );
       if (this.game.screenEffects) {
-        this.game.screenEffects.flash(0x06b6d4, 0.3); // Cyan flash
+        this.game.screenEffects.flash(0x06b6d4, 0.15); // Reduced intensity (Cyan flash)
       }
     } else {
       this.game.ui.showToast("No Fog Removers! Buy from Shop.", "error");

@@ -17,6 +17,7 @@ export class UIManager {
       profileScreen: document.getElementById("profileScreen"),
       leaderboardScreen: document.getElementById("leaderboardScreen"),
       settingsScreen: document.getElementById("settingsScreen"),
+      gameEndScreen: document.getElementById("gameEndScreen"),
     };
 
     // Toast Notification Queue
@@ -151,6 +152,35 @@ export class UIManager {
         this.showScreen("mainMenu");
         window.game?.stopGame();
       });
+    });
+
+    // Game End handlers
+    document.getElementById("playAgainBtn")?.addEventListener("click", async () => {
+      document.getElementById("gameEndScreen").classList.remove("active");
+      await window.game?.startNewGame();
+    });
+
+    document.getElementById("mainMenuBtn")?.addEventListener("click", () => {
+      document.getElementById("gameEndScreen").classList.remove("active");
+      this.showScreen("mainMenu");
+      window.game?.stopGame();
+    });
+
+    // Deprecated: Old close button handler (keeping for compatibility if anyone upgrades)
+    document.getElementById("closeGameBtn")?.addEventListener("click", () => {
+      document.getElementById("gameEndScreen").classList.remove("active");
+
+      // Try to close the window
+      try {
+        if (!window.close()) {
+          // If close() doesn't work (most browsers), go back to main menu
+          this.showScreen("mainMenu");
+          window.game?.stopGame();
+        }
+      } catch (e) {
+        this.showScreen("mainMenu");
+        window.game?.stopGame();
+      }
     });
 
     // Explicit Game Back Button (Top Left)
@@ -621,7 +651,7 @@ export class UIManager {
 
       // Apply data from most recent record to local storage
       this.gameData.set("highestLevel", highestLevel);
-      this.gameData.set("currentLevel", highestLevel + 1);
+      this.gameData.set("currentLevel", Math.min(10, highestLevel + 1));
       this.gameData.set("bestScore", bestScore);
       this.gameData.set("bestTime", mostRecentGame.time || null);
       this.gameData.set("gamesPlayed", gamesPlayed);
@@ -847,6 +877,11 @@ export class UIManager {
     document.getElementById("profileHighestLevel").textContent = d.highestLevel;
     document.getElementById("profileTotalCoins").textContent =
       d.totalCoins || 0;
+
+    const completions = d.history ? d.history.length : 0;
+    const completionsEl = document.getElementById("profileCompletions");
+    if (completionsEl) completionsEl.textContent = completions;
+
     document.getElementById("profileZombiesPurified").textContent =
       d.totalZombiesPurified || 0;
 
@@ -888,6 +923,43 @@ export class UIManager {
         a.name
       }</span></div>`;
     }).join("");
+
+    // --- Render History ---
+    const historyList = document.getElementById("gameHistoryList");
+    if (historyList) {
+      const history = d.history || [];
+      if (history.length === 0) {
+        historyList.innerHTML = `<div class="no-history">No games completed yet. Reach Level 10 to see your history!</div>`;
+      } else {
+        historyList.innerHTML = history
+          .slice()
+          .reverse() // Newest first
+          .map(
+            (h) => {
+              // Enhanced display for full game completions
+              const isFullCompletion = h.completionType === "FULL_GAME_COMPLETION";
+              const achievementCount = isFullCompletion && h.achievementsUnlocked ? h.achievementsUnlocked.length : 0;
+              const badge = isFullCompletion ? `<span class="history-badge" title="Achievements unlocked">🏆 ${achievementCount}</span>` : "";
+              const details = isFullCompletion && h.totalMoves ? `<div class="history-details">Steps: ${h.totalMoves.toLocaleString()} · Time: ${h.totalGameTime || "N/A"}s</div>` : "";
+              
+              return `
+          <div class="history-item ${isFullCompletion ? "full-completion" : ""}">
+            <div class="history-info">
+              <div class="history-main">
+                <span class="history-status">${h.status || "Completed"}${isFullCompletion ? " 🎊" : ""}</span>
+                <span class="history-date">${h.date || "Unknown Date"}</span>
+                ${badge}
+              </div>
+              ${details}
+            </div>
+            <div class="history-score">${(h.score || 0).toLocaleString()}</div>
+          </div>
+        `;
+            },
+          )
+          .join("");
+      }
+    }
   }
 
   async refreshLeaderboardFromBlockchain() {
@@ -1232,6 +1304,23 @@ export class UIManager {
         }
       }
 
+      // Update button text for final level
+      const nextLevelBtn = document.getElementById("nextLevelBtn");
+      if (nextLevelBtn) {
+        const btnText = nextLevelBtn.querySelector(
+          "span:not(.material-icons-round)",
+        );
+        const btnIcon = nextLevelBtn.querySelector(".material-icons-round");
+
+        if (extras.level >= 10) {
+          if (btnText) btnText.textContent = "Finish Game";
+          if (btnIcon) btnIcon.textContent = "emoji_events";
+        } else {
+          if (btnText) btnText.textContent = "Next Level";
+          if (btnIcon) btnIcon.textContent = "arrow_forward";
+        }
+      }
+
       // Time label (PERFECT, EXCELLENT, etc.)
       const timeLabelEl = document.getElementById("victoryTimeLabel");
       if (timeLabelEl && extras.timeLabel) {
@@ -1265,5 +1354,17 @@ export class UIManager {
     modal.style.display = "none";
     modal.classList.remove("active");
     this.pendingShareData = null;
+  }
+
+  showGameEndScreen(totalScore) {
+    const gameEndScreen = document.getElementById("gameEndScreen");
+    const scoreDisplay = document.getElementById("finalTotalScore");
+
+    if (scoreDisplay) scoreDisplay.textContent = totalScore || 0;
+
+    // De-activate other screens
+    document.getElementById("victoryScreen").classList.remove("active");
+
+    gameEndScreen.classList.add("active");
   }
 }
